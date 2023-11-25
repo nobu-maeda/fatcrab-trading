@@ -1,0 +1,9 @@
+[package]
+name = "fatcrab-trading"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+crusty-n3xb = { git = "https://github.com/nobu-maeda/crusty-n3xb" }
