@@ -1,5 +1,4 @@
+pub mod error;
+pub mod make_trade;
+pub mod take_trade;
 pub mod trader;
-
-mod error;
-mod make_trade;
-mod take_trade;
