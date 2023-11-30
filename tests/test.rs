@@ -1,11 +1,17 @@
 #[cfg(test)]
 mod test {
-    use fatcrab_trading::trader::Trader;
+    use fatcrab_trading::{trade_order::TradeOrder, trader::Trader};
+    use uuid::Uuid;
 
     #[tokio::test]
     async fn test_sanity() {
         let trader = Trader::new().await;
-        let make_trade = trader.make_order();
+        let trade_order = TradeOrder::Buy {
+            amount: 100,
+            price: 1000.0,
+            fatcrab_acct_id: Uuid::new_v4(),
+        };
+        let make_trade = trader.make_order(trade_order).await;
 
         let (test_tx, mut test_rx) = tokio::sync::mpsc::channel::<String>(5);
 
@@ -15,12 +21,5 @@ mod test {
         });
 
         make_trade.register_notif_tx(test_tx).await.unwrap();
-
-        make_trade
-            .register_notif_callback(|msg| {
-                println!("notif callback with string: {}", msg);
-            })
-            .await
-            .unwrap();
     }
 }

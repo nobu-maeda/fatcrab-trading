@@ -1,7 +1,10 @@
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
+use crusty_n3xb::machine::maker::MakerAccess;
+
 use crate::error::FatCrabError;
+use crate::trade_order::TradeOrder;
 
 #[derive(Clone)]
 pub struct MakeTradeAccess {
@@ -11,15 +14,6 @@ pub struct MakeTradeAccess {
 impl MakeTradeAccess {
     async fn new(tx: mpsc::Sender<MakeTradeRequest>) -> Self {
         Self { tx }
-    }
-
-    pub async fn register_notif_callback(&self, callback: fn(String)) -> Result<(), FatCrabError> {
-        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
-        self.tx
-            .send(MakeTradeRequest::RegisterNotifCallback { callback, rsp_tx })
-            .await
-            .unwrap();
-        rsp_rx.await.unwrap()
     }
 
     pub async fn register_notif_tx(&self, tx: mpsc::Sender<String>) -> Result<(), FatCrabError> {
@@ -32,7 +26,7 @@ impl MakeTradeAccess {
     }
 }
 
-pub struct MakeTrade {
+pub(crate) struct MakeTrade {
     tx: mpsc::Sender<MakeTradeRequest>,
     task_handle: tokio::task::JoinHandle<()>,
 }
@@ -40,9 +34,9 @@ pub struct MakeTrade {
 impl MakeTrade {
     const MAKE_TRADE_REQUEST_CHANNEL_SIZE: usize = 10;
 
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(trade_order: TradeOrder, n3xb_maker: MakerAccess) -> Self {
         let (tx, rx) = mpsc::channel::<MakeTradeRequest>(Self::MAKE_TRADE_REQUEST_CHANNEL_SIZE);
-        let mut actor = MakeTradeActor::new(rx);
+        let mut actor = MakeTradeActor::new(rx, trade_order, n3xb_maker);
         let task_handle = tokio::spawn(async move { actor.run().await });
         Self { tx, task_handle }
     }
@@ -55,10 +49,6 @@ impl MakeTrade {
 }
 
 enum MakeTradeRequest {
-    RegisterNotifCallback {
-        callback: fn(String),
-        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
-    },
     RegisterNotifTx {
         tx: mpsc::Sender<String>,
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
@@ -67,20 +57,26 @@ enum MakeTradeRequest {
 
 struct MakeTradeActor {
     rx: mpsc::Receiver<MakeTradeRequest>,
+    trade_order: TradeOrder,
+    n3xb_maker: MakerAccess,
 }
 
 impl MakeTradeActor {
-    fn new(rx: mpsc::Receiver<MakeTradeRequest>) -> Self {
-        Self { rx }
+    fn new(
+        rx: mpsc::Receiver<MakeTradeRequest>,
+        trade_order: TradeOrder,
+        n3xb_maker: MakerAccess,
+    ) -> Self {
+        Self {
+            rx,
+            trade_order,
+            n3xb_maker,
+        }
     }
 
     async fn run(&mut self) {
         while let Some(req) = self.rx.recv().await {
             match req {
-                MakeTradeRequest::RegisterNotifCallback { callback, rsp_tx } => {
-                    callback(Uuid::new_v4().to_string());
-                    rsp_tx.send(Ok(())).unwrap();
-                }
                 MakeTradeRequest::RegisterNotifTx { tx, rsp_tx } => {
                     tx.send(Uuid::new_v4().to_string()).await.unwrap();
                     rsp_tx.send(Ok(())).unwrap();
