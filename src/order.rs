@@ -23,7 +23,7 @@ impl SerdeGenericTrait for FatCrabMakeOrderSpecifics {
 }
 
 #[derive(Clone)]
-pub enum TradeOrder {
+pub enum FatCrabOrder {
     Buy {
         amount: u64,
         price: f64,
@@ -36,12 +36,12 @@ pub enum TradeOrder {
     },
 }
 
-impl Into<Order> for TradeOrder {
+impl Into<Order> for FatCrabOrder {
     fn into(self) -> Order {
         let mut builder = OrderBuilder::new();
 
         match self {
-            TradeOrder::Buy {
+            FatCrabOrder::Buy {
                 amount,
                 price,
                 fatcrab_acct_id,
@@ -83,7 +83,7 @@ impl Into<Order> for TradeOrder {
                 };
                 builder.trade_engine_specifics(Box::new(trade_engine_specifics));
             }
-            TradeOrder::Sell {
+            FatCrabOrder::Sell {
                 amount,
                 price,
                 bitcoin_addr,

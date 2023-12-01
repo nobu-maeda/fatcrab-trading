@@ -1,33 +1,33 @@
 use std::{collections::HashMap, net::SocketAddr, sync::RwLock};
 
-use crusty_n3xb::manager::Manager;
+use crusty_n3xb::{machine::taker::TakerAccess, manager::Manager};
 use secp256k1::{SecretKey, XOnlyPublicKey};
 use uuid::Uuid;
 
 use crate::{
     error::FatCrabError,
-    make_trade::{MakeTrade, MakeTradeAccess},
-    take_trade::{TakeTrade, TakeTradeAccess},
-    trade_order::TradeOrder,
+    maker::{FatCrabMaker, FatCrabMakerAccess},
+    order::FatCrabOrder,
+    taker::{FatCrabTaker, FatCrabTakerAccess},
 };
 
-pub struct Trader {
+pub struct FatCrabTrader {
     n3xb_manager: Manager,
-    make_trades: RwLock<HashMap<Uuid, MakeTrade>>,
-    take_trades: RwLock<HashMap<Uuid, TakeTrade>>,
-    make_trade_accessors: RwLock<HashMap<Uuid, MakeTradeAccess>>,
-    take_trade_accessors: RwLock<HashMap<Uuid, TakeTradeAccess>>,
+    makers: RwLock<HashMap<Uuid, FatCrabMaker>>,
+    takers: RwLock<HashMap<Uuid, FatCrabTaker>>,
+    maker_accessors: RwLock<HashMap<Uuid, FatCrabMakerAccess>>,
+    taker_accessors: RwLock<HashMap<Uuid, FatCrabTakerAccess>>,
 }
 
-impl Trader {
+impl FatCrabTrader {
     pub async fn new() -> Self {
         let trade_engine_name = "fat-crab-trade-engine";
         Self {
             n3xb_manager: Manager::new(trade_engine_name).await,
-            make_trades: RwLock::new(HashMap::new()),
-            take_trades: RwLock::new(HashMap::new()),
-            make_trade_accessors: RwLock::new(HashMap::new()),
-            take_trade_accessors: RwLock::new(HashMap::new()),
+            makers: RwLock::new(HashMap::new()),
+            takers: RwLock::new(HashMap::new()),
+            maker_accessors: RwLock::new(HashMap::new()),
+            taker_accessors: RwLock::new(HashMap::new()),
         }
     }
 
@@ -36,10 +36,10 @@ impl Trader {
         let n3xb_manager = Manager::new_with_keys(key, trade_engine_name).await;
         Self {
             n3xb_manager,
-            make_trades: RwLock::new(HashMap::new()),
-            take_trades: RwLock::new(HashMap::new()),
-            make_trade_accessors: RwLock::new(HashMap::new()),
-            take_trade_accessors: RwLock::new(HashMap::new()),
+            makers: RwLock::new(HashMap::new()),
+            takers: RwLock::new(HashMap::new()),
+            maker_accessors: RwLock::new(HashMap::new()),
+            taker_accessors: RwLock::new(HashMap::new()),
         }
     }
 
@@ -55,38 +55,35 @@ impl Trader {
         Ok(())
     }
 
-    pub async fn make_order(&self, trade_order: TradeOrder) -> MakeTradeAccess {
-        let maker = self
+    pub async fn make_order(&self, order: FatCrabOrder) -> FatCrabMakerAccess {
+        let n3xb_maker = self
             .n3xb_manager
-            .new_maker(trade_order.clone().into())
+            .new_maker(order.clone().into())
             .await
             .unwrap();
 
-        let make_trade = MakeTrade::new(trade_order, maker);
-        let make_trade_accessor = make_trade.new_accessor();
-        let make_trade_return_accessor = make_trade_accessor.clone();
-        let make_trade_id = Uuid::new_v4();
+        let maker = FatCrabMaker::new(order, n3xb_maker).await;
+        let maker_accessor = maker.new_accessor();
+        let maker_return_accessor = maker.new_accessor();
+        let maker_id = Uuid::new_v4();
 
-        self.make_trades
+        self.makers.write().unwrap().insert(maker_id, maker);
+
+        self.maker_accessors
             .write()
             .unwrap()
-            .insert(make_trade_id, make_trade);
+            .insert(maker_id, maker_accessor);
 
-        self.make_trade_accessors
-            .write()
-            .unwrap()
-            .insert(make_trade_id, make_trade_accessor);
-
-        make_trade_return_accessor
+        maker_return_accessor
     }
 
     pub fn list_orders(&self) {
         println!("Listing orders");
     }
 
-    pub fn take_order(&self) -> TakeTradeAccess {
+    pub fn take_order(&self) -> FatCrabTakerAccess {
         println!("Taking order");
-        TakeTradeAccess {}
+        FatCrabTakerAccess {}
     }
 
     pub fn shutdown(self) {}
