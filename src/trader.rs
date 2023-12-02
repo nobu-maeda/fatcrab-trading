@@ -1,13 +1,22 @@
-use std::{collections::HashMap, net::SocketAddr, sync::RwLock};
+use std::{
+    collections::{HashMap, HashSet},
+    net::SocketAddr,
+    sync::RwLock,
+};
 
-use crusty_n3xb::{machine::taker::TakerAccess, manager::Manager};
+use crusty_n3xb::{
+    common::types::{BitcoinSettlementMethod, ObligationKind},
+    manager::Manager,
+    order::FilterTag,
+};
 use secp256k1::{SecretKey, XOnlyPublicKey};
 use uuid::Uuid;
 
 use crate::{
+    common::FATCRAB_OBLIGATION_CUSTOM_KIND_STRING,
     error::FatCrabError,
     maker::{FatCrabMaker, FatCrabMakerAccess},
-    order::FatCrabOrder,
+    order::{FatCrabOrder, FatCrabOrderType},
     taker::{FatCrabTaker, FatCrabTakerAccess},
 };
 
@@ -77,8 +86,47 @@ impl FatCrabTrader {
         maker_return_accessor
     }
 
-    pub fn list_orders(&self) {
-        println!("Listing orders");
+    pub async fn query_orders(
+        &self,
+        order_type: FatCrabOrderType,
+    ) -> Result<Vec<FatCrabOrder>, FatCrabError> {
+        let custom_fatcrab_obligation_kind: ObligationKind =
+            ObligationKind::Custom(FATCRAB_OBLIGATION_CUSTOM_KIND_STRING.to_string());
+        let bitcoin_onchain_obligation_kind: ObligationKind =
+            ObligationKind::Bitcoin(Some(BitcoinSettlementMethod::Onchain));
+
+        let mut filter_tags = Vec::new();
+        match order_type {
+            FatCrabOrderType::Buy => {
+                let maker_obligation_filter = FilterTag::MakerObligations(HashSet::from_iter(
+                    vec![bitcoin_onchain_obligation_kind.clone()].into_iter(),
+                ));
+                let taker_obligation_filter = FilterTag::TakerObligations(HashSet::from_iter(
+                    vec![custom_fatcrab_obligation_kind.clone()].into_iter(),
+                ));
+                filter_tags.push(maker_obligation_filter);
+                filter_tags.push(taker_obligation_filter);
+            }
+
+            FatCrabOrderType::Sell => {
+                let maker_obligation_filter = FilterTag::MakerObligations(HashSet::from_iter(
+                    vec![custom_fatcrab_obligation_kind.clone()].into_iter(),
+                ));
+                let taker_obligation_filter = FilterTag::TakerObligations(HashSet::from_iter(
+                    vec![bitcoin_onchain_obligation_kind.clone()].into_iter(),
+                ));
+                filter_tags.push(maker_obligation_filter);
+                filter_tags.push(taker_obligation_filter);
+            }
+        }
+
+        let n3xb_orders = self.n3xb_manager.query_orders(filter_tags).await?;
+        let order: Vec<FatCrabOrder> = n3xb_orders
+            .into_iter()
+            .map(|envelope| FatCrabOrder::from_n3xb_order(envelope.order).unwrap())
+            .collect();
+
+        Ok(order)
     }
 
     pub fn take_order(&self) -> FatCrabTakerAccess {

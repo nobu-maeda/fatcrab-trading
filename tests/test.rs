@@ -6,7 +6,10 @@ mod test {
 
     use uuid::Uuid;
 
-    use fatcrab_trading::{order::FatCrabOrder, trader::FatCrabTrader};
+    use fatcrab_trading::{
+        order::{FatCrabOrder, FatCrabOrderType},
+        trader::FatCrabTrader,
+    };
 
     use crate::relay::Relay;
 
@@ -57,9 +60,12 @@ mod test {
         // Maker - Create Fatcrab Make Trader
         let maker = trader_m.make_order(trade_order).await;
 
-        // Taker - Create Fatcrab Trader
-
         // Taker - Query Fatcrab Trade Order
+        let orders = trader_t.query_orders(FatCrabOrderType::Sell).await.unwrap();
+        assert_eq!(orders.len(), 0);
+
+        let orders = trader_t.query_orders(FatCrabOrderType::Buy).await.unwrap();
+        assert_eq!(orders.len(), 1);
 
         // Taker - Create Fatcrab Take Trader & Take Trade Order
 
