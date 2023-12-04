@@ -10,6 +10,7 @@ mod test {
         maker::FatCrabMakerNotif,
         offer::FatCrabOffer,
         order::{FatCrabOrder, FatCrabOrderType},
+        taker::FatCrabTakerNotif,
         trade_rsp::FatCrabTradeRsp,
         trader::FatCrabTrader,
     };
@@ -84,6 +85,10 @@ mod test {
         };
         let taker = trader_t.take_order(orders[0].clone(), offer).await;
 
+        let (taker_notif_tx, mut taker_notif_rx) =
+            tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
+        taker.register_notif_tx(taker_notif_tx).await.unwrap();
+
         // Maker - Wait for Fatcrab Trader Order to be taken
         let maker_notif = maker_notif_rx.recv().await.unwrap();
 
@@ -110,6 +115,21 @@ mod test {
             .unwrap();
 
         // Taker - Wait for Fatcrab Trade Response
+        let taker_notif = taker_notif_rx.recv().await.unwrap();
+
+        match taker_notif {
+            FatCrabTakerNotif::TradeResponse { trade_rsp_envelope } => {
+                match trade_rsp_envelope.trade_rsp {
+                    FatCrabTradeRsp::Accept => {}
+                    _ => {
+                        panic!("Taker only expects Accepted Trade Response at this point");
+                    }
+                }
+            }
+            _ => {
+                panic!("Taker only expects Accepted Trade Response at this point");
+            }
+        }
 
         // Taker - Signal user to remit Fatcrab
 

@@ -1,15 +1,53 @@
 use crusty_n3xb::machine::taker::TakerAccess;
-use tokio::sync::{mpsc, oneshot};
+use log::{error, warn};
+use tokio::{
+    select,
+    sync::{mpsc, oneshot},
+};
 
-use crate::{error::FatCrabError, offer::FatCrabOffer, order::FatCrabOrderEnvelope};
+use crate::{
+    error::FatCrabError,
+    offer::FatCrabOffer,
+    order::FatCrabOrderEnvelope,
+    peer_msg::{FatCrabPeerEnvelope, FatCrabPeerMsg},
+    trade_rsp::{FatCrabTradeRsp, FatCrabTradeRspEnvelope},
+};
 
 pub enum FatCrabTakerNotif {
-    TradeRsp,
+    TradeResponse {
+        trade_rsp_envelope: FatCrabTradeRspEnvelope,
+    },
+    PeerMessage {
+        peer_msg_envelope: FatCrabPeerEnvelope,
+    },
 }
 
 #[derive(Clone)]
 pub struct FatCrabTakerAccess {
     tx: mpsc::Sender<FatCrabTakerRequest>,
+}
+
+impl FatCrabTakerAccess {
+    pub async fn register_notif_tx(
+        &self,
+        tx: mpsc::Sender<FatCrabTakerNotif>,
+    ) -> Result<(), FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
+        self.tx
+            .send(FatCrabTakerRequest::RegisterNotifTx { tx, rsp_tx })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
+    pub async fn unregister_notif_tx(&self) -> Result<(), FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
+        self.tx
+            .send(FatCrabTakerRequest::UnregisterNotifTx { rsp_tx })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
 }
 
 pub(crate) struct FatCrabTaker {
@@ -73,13 +111,72 @@ impl FatCrabTakerActor {
     }
 
     async fn run(&mut self) {
-        while let Some(req) = self.rx.recv().await {
-            match req {
-                FatCrabTakerRequest::RegisterNotifTx { tx, rsp_tx } => {
-                    self.register_notif_tx(tx, rsp_tx).await;
-                }
-                FatCrabTakerRequest::UnregisterNotifTx { rsp_tx } => {
-                    self.unregister_notif_tx(rsp_tx).await;
+        let (trade_rsp_notif_tx, mut trade_rsp_notif_rx) = mpsc::channel(5);
+        let (peer_notif_tx, mut peer_notif_rx) = mpsc::channel(5);
+
+        self.n3xb_taker
+            .register_trade_notif_tx(trade_rsp_notif_tx)
+            .await
+            .unwrap();
+        self.n3xb_taker
+            .register_peer_notif_tx(peer_notif_tx)
+            .await
+            .unwrap();
+
+        loop {
+            select! {
+                Some(request) = self.rx.recv() => {
+                    match request {
+                        FatCrabTakerRequest::RegisterNotifTx { tx, rsp_tx } => {
+                            self.register_notif_tx(tx, rsp_tx).await;
+                        }
+                        FatCrabTakerRequest::UnregisterNotifTx { rsp_tx } => {
+                            self.unregister_notif_tx(rsp_tx).await;
+                        }
+                    }
+                },
+
+                Some(trade_rsp_result) = trade_rsp_notif_rx.recv() => {
+                    let trade_uuid = self.order.order.trade_uuid();
+
+                    match trade_rsp_result {
+                        Ok(n3xb_trade_rsp_envelope) => {
+                            if let Some(notif_tx) = &self.notif_tx {
+                                let fatcrab_trade_rsp_envelope = FatCrabTradeRspEnvelope {
+                                    envelope: n3xb_trade_rsp_envelope.clone(),
+                                    trade_rsp: FatCrabTradeRsp::from_n3xb_trade_rsp( n3xb_trade_rsp_envelope.trade_rsp)
+                                };
+                                notif_tx.send(FatCrabTakerNotif::TradeResponse { trade_rsp_envelope: fatcrab_trade_rsp_envelope }).await.unwrap();
+                            } else {
+                                warn!("Taker w/ TradeUUID {} do not have notif_tx registered", trade_uuid.to_string());
+                            }
+                        }
+                        Err(error) => {
+                            error!("Taker w/ TradeUUID {} Offer Notification Rx Error - {}", trade_uuid.to_string(), error.to_string());
+                        }
+                    }
+                },
+
+                Some(peer_result) = peer_notif_rx.recv() => {
+                    let trade_uuid = self.order.order.trade_uuid();
+
+                    match peer_result {
+                        Ok(n3xb_peer_envelope) => {
+                            let fatcrab_peer_msg = n3xb_peer_envelope.message.downcast_ref::<FatCrabPeerMsg>().unwrap().clone();
+                            if let Some(notif_tx) = &self.notif_tx {
+                                let fatcrab_peer_envelope = FatCrabPeerEnvelope {
+                                    envelope: n3xb_peer_envelope,
+                                    peer_msg: fatcrab_peer_msg
+                                };
+                                notif_tx.send(FatCrabTakerNotif::PeerMessage { peer_msg_envelope: fatcrab_peer_envelope }).await.unwrap();
+                            } else {
+                                warn!("Taker w/ TradeUUID {} do not have notif_tx registered", trade_uuid.to_string());
+                            }
+                        },
+                        Err(error) => {
+                            error!("Taker w/ TradeUUID {} Peer Notification Rx Error - {}", trade_uuid.to_string(), error.to_string());
+                        }
+                    }
                 }
             }
         }

@@ -152,6 +152,8 @@ impl FatCrabMakerActor {
                 },
 
                 Some(offer_result) = offer_notif_rx.recv() => {
+                    let trade_uuid = self.order.trade_uuid();
+
                     match offer_result {
                         Ok(n3xb_offer_envelope) => {
                             if let Some(notif_tx) = &self.notif_tx {
@@ -162,11 +164,11 @@ impl FatCrabMakerActor {
                                 };
                                 notif_tx.send(FatCrabMakerNotif::Offer(fatcrab_offer_envelope)).await.unwrap();
                             } else {
-                                warn!("Maker w/ TradeUUID {} do not have notif_tx registered", self.order.trade_uuid());
+                                warn!("Maker w/ TradeUUID {} do not have notif_tx registered", trade_uuid.to_string());
                             }
                         },
                         Err(error) => {
-                            error!("Offer Notification Rx Error - {}", error.to_string());
+                            error!("Maker w/ TradeUUID {} Offer Notification Rx Error - {}", trade_uuid.to_string(), error.to_string());
                         }
                     }
 
