@@ -7,6 +7,7 @@ mod test {
     use uuid::Uuid;
 
     use fatcrab_trading::{
+        offer::FatCrabOffer,
         order::{FatCrabOrder, FatCrabOrderType},
         trader::FatCrabTrader,
     };
@@ -52,13 +53,16 @@ mod test {
 
         // Maker - Create Fatcrab Trade Order
         let trade_order = FatCrabOrder::Buy {
-            amount: 100,
+            amount: 100.0,
             price: 1000.0,
             fatcrab_acct_id: Uuid::new_v4(),
         };
 
         // Maker - Create Fatcrab Make Trader
         let maker = trader_m.make_order(trade_order).await;
+
+        // Maker - Create channels & register Notif Tx
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<FatCrabOffer>(5);
 
         // Taker - Query Fatcrab Trade Order
         let orders = trader_t.query_orders(FatCrabOrderType::Sell).await.unwrap();
@@ -92,14 +96,5 @@ mod test {
         // Taker - Confirm Bitcoin txid
 
         // Taker - Trade Completion
-
-        let (test_tx, mut test_rx) = tokio::sync::mpsc::channel::<String>(5);
-
-        tokio::spawn(async move {
-            let some_string = test_rx.recv().await.unwrap();
-            println!("test_rx got some_string response {}", some_string);
-        });
-
-        maker.register_notif_tx(test_tx).await.unwrap();
     }
 }

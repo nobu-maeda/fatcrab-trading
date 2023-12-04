@@ -34,20 +34,26 @@ pub enum FatCrabOrderType {
 #[derive(Clone)]
 pub enum FatCrabOrder {
     Buy {
-        amount: u64,
-        price: f64,
-        fatcrab_acct_id: Uuid,
+        amount: f64,           // in FC
+        price: f64,            // in sats / FC
+        fatcrab_acct_id: Uuid, // to receive FCs
     },
     Sell {
-        amount: u64,
-        price: f64,
-        bitcoin_addr: String,
+        amount: f64,          // in FC
+        price: f64,           // in sats / FC
+        bitcoin_addr: String, // to receive BTC
     },
 }
 
+// Quick Reference for FatCrab Order to n3xB Order Maker/Taker Obligation
+// FatCrab Buy Orders - Amount in FC, Price in BTC(sats)/FC
+// n3xB Orders - Maker Obligation BTC, Amount in sats, receives FCs. Taker Obligation FC, Limit rate in #FC/#Sats = 1/Price
+// FatCrab Sell Orders - Amount in FC, Price in BTC(sats)/FC
+// n3xB Orders - Maker Obligation in FC, Amount in FC, receives sats. Taker Obligation BTC, Limit rate in #Sats/#FC = Price
+
 impl FatCrabOrder {
-    pub fn from_n3xb_order(order: Order) -> Result<Self, FatCrabError> {
-        let mut amount: Option<u64> = None;
+    pub(crate) fn from_n3xb_order(order: Order) -> Result<Self, FatCrabError> {
+        let mut amount: Option<f64> = None;
         let mut price: Option<f64> = None;
         let mut fatcrab_order_kind: Option<FatCrabOrderType> = None;
         let mut intended_order_kind: Option<FatCrabOrderType> = None;
@@ -69,7 +75,7 @@ impl FatCrabOrder {
                             let bitcoin_sat_amount = order.maker_obligation.content.amount;
                             let limit_rate = order.taker_obligation.content.limit_rate.unwrap();
                             price = Some(1.0 / limit_rate);
-                            amount = Some((bitcoin_sat_amount as f64 * limit_rate).round() as u64);
+                            amount = Some(bitcoin_sat_amount as f64 * limit_rate);
                         }
                     }
                 }
