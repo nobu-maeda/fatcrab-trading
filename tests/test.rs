@@ -18,7 +18,10 @@ mod test {
 
     #[tokio::test]
     async fn test() {
-        // Initial Relays
+        // TODO: Initialize Regtest Bitcoin Blockchain
+        // TODO: Mine a block
+
+        // Initialize Relays
         let mut relays: Vec<Relay> = Vec::new();
 
         let relay: Relay = Relay::start();
@@ -38,9 +41,13 @@ mod test {
         relays.push(relay);
 
         // Maker - Create Fatcrab Trader for Maker
+        // TODO: Generate seed, create wallet, and return seed to user
         let trader_m = FatCrabTrader::new().await;
 
-        // Taker - Create Fatcrab Trader fOR Taker
+        // TODO: Maker - Fund Maker Fatcrab Trader internal wallet from miner
+
+        // Taker - Create Fatcrab Trader for Taker
+        // TODO: Generate see, create wallet, and return seed to user
         let trader_t = FatCrabTrader::new().await;
 
         // Add Relays
@@ -131,11 +138,11 @@ mod test {
 
         // Maker - Wait for Fatcrab Peer Message
 
-        // Maker - Send Bitcoin to Taker Bitcoin address
+        // Maker - (Auto) Send Bitcoin to Taker Bitcoin address
 
-        // Maker - Send Fatcrab Peer Message with Bitcoin txid
+        // Maker - (Auto) Send Fatcrab Peer Message with Bitcoin txid
 
-        // Maker - Trade Completion
+        // Maker - (Auto) Trade Completion
 
         // Taker - Wait for Fatcrab Peer Message
 
