@@ -14,9 +14,7 @@ use crusty_n3xb::{
 use crate::{common::FATCRAB_OBLIGATION_CUSTOM_KIND_STRING, error::FatCrabError};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct FatCrabMakeOrderSpecifics {
-    receive_address: String,
-}
+struct FatCrabMakeOrderSpecifics {}
 
 #[typetag::serde(name = "fatcrab_make_order_specifics")]
 impl SerdeGenericTrait for FatCrabMakeOrderSpecifics {
@@ -25,7 +23,7 @@ impl SerdeGenericTrait for FatCrabMakeOrderSpecifics {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FatCrabOrderType {
     Buy,
     Sell,
@@ -38,19 +36,11 @@ pub struct FatCrabOrderEnvelope {
 }
 
 #[derive(Debug, Clone)]
-pub enum FatCrabOrder {
-    Buy {
-        trade_uuid: Uuid,
-        amount: f64,           // in FC
-        price: f64,            // in sats / FC
-        fatcrab_acct_id: Uuid, // to receive FCs
-    },
-    Sell {
-        trade_uuid: Uuid,
-        amount: f64,          // in FC
-        price: f64,           // in sats / FC
-        bitcoin_addr: String, // to receive BTC
-    },
+pub struct FatCrabOrder {
+    pub order_type: FatCrabOrderType,
+    pub trade_uuid: Uuid,
+    pub amount: f64, // in FC
+    pub price: f64,  // in sats / FC       // in sats / FC
 }
 
 // Quick Reference for FatCrab Order to n3xB Order Maker/Taker Obligation
@@ -60,13 +50,6 @@ pub enum FatCrabOrder {
 // n3xB Orders - Maker Obligation in FC, Amount in FC, receives sats. Taker Obligation BTC, Limit rate in #Sats/#FC = Price
 
 impl FatCrabOrder {
-    pub fn trade_uuid(&self) -> &Uuid {
-        match self {
-            Self::Buy { trade_uuid, .. } => trade_uuid,
-            Self::Sell { trade_uuid, .. } => trade_uuid,
-        }
-    }
-
     pub(crate) fn from_n3xb_order(order: Order) -> Result<Self, FatCrabError> {
         let mut amount: Option<f64> = None;
         let mut price: Option<f64> = None;
@@ -148,32 +131,12 @@ impl FatCrabOrder {
         if let (Some(fatcrab_order_kind), Some(amount), Some(price)) =
             (fatcrab_order_kind, amount, price)
         {
-            let fatcrab_specifics = order
-                .trade_engine_specifics
-                .downcast_ref::<FatCrabMakeOrderSpecifics>()
-                .unwrap();
-
-            match fatcrab_order_kind {
-                FatCrabOrderType::Buy => {
-                    return Ok(Self::Buy {
-                        trade_uuid: order.trade_uuid,
-                        amount,
-                        price,
-                        fatcrab_acct_id: Uuid::parse_str(
-                            fatcrab_specifics.receive_address.as_str(),
-                        )
-                        .unwrap(),
-                    })
-                }
-                FatCrabOrderType::Sell => {
-                    return Ok(Self::Sell {
-                        trade_uuid: order.trade_uuid,
-                        amount,
-                        price,
-                        bitcoin_addr: fatcrab_specifics.receive_address.clone(),
-                    })
-                }
-            }
+            return Ok(Self {
+                order_type: fatcrab_order_kind,
+                trade_uuid: order.trade_uuid,
+                amount,
+                price,
+            });
         } else {
             Err(FatCrabError::Simple {
                 description: "FatCrabOrder::from() - Could not determine order type".to_string(),
@@ -186,21 +149,16 @@ impl Into<Order> for FatCrabOrder {
     fn into(self) -> Order {
         let mut builder = OrderBuilder::new();
 
-        match self {
-            Self::Buy {
-                trade_uuid,
-                amount,
-                price,
-                fatcrab_acct_id,
-            } => {
-                builder.trade_uuid(trade_uuid);
+        match self.order_type {
+            FatCrabOrderType::Buy => {
+                builder.trade_uuid(self.trade_uuid);
 
                 let maker_obligation_kind =
                     ObligationKind::Bitcoin(Some(BitcoinSettlementMethod::Onchain));
                 let maker_obligation_kinds =
                     HashSet::from_iter(vec![maker_obligation_kind].into_iter());
                 let maker_obligation_content = MakerObligationContent {
-                    amount,
+                    amount: self.amount,
                     amount_min: None,
                 };
 
@@ -215,7 +173,7 @@ impl Into<Order> for FatCrabOrder {
                 let taker_obligation_kinds =
                     HashSet::from_iter(vec![taker_obligation_kind].into_iter());
                 let taker_obligation_content = TakerObligationContent {
-                    limit_rate: Some(1.0 / price),
+                    limit_rate: Some(1.0 / self.price),
                     market_offset_pct: None,
                     market_oracles: None,
                 };
@@ -227,24 +185,17 @@ impl Into<Order> for FatCrabOrder {
 
                 builder.taker_obligation(taker_obligation);
 
-                let trade_engine_specifics = FatCrabMakeOrderSpecifics {
-                    receive_address: fatcrab_acct_id.to_string(),
-                };
+                let trade_engine_specifics = FatCrabMakeOrderSpecifics {};
                 builder.trade_engine_specifics(Box::new(trade_engine_specifics));
             }
-            Self::Sell {
-                trade_uuid,
-                amount,
-                price,
-                bitcoin_addr,
-            } => {
-                builder.trade_uuid(trade_uuid);
+            FatCrabOrderType::Sell => {
+                builder.trade_uuid(self.trade_uuid);
 
                 let maker_obligation_kind = ObligationKind::Custom("FatCrab".to_string());
                 let maker_obligation_kinds =
                     HashSet::from_iter(vec![maker_obligation_kind].into_iter());
                 let maker_obligation_content = MakerObligationContent {
-                    amount,
+                    amount: self.amount,
                     amount_min: None,
                 };
 
@@ -260,7 +211,7 @@ impl Into<Order> for FatCrabOrder {
                 let taker_obligation_kinds =
                     HashSet::from_iter(vec![taker_obligation_kind].into_iter());
                 let taker_obligation_content = TakerObligationContent {
-                    limit_rate: Some(price),
+                    limit_rate: Some(self.price),
                     market_offset_pct: None,
                     market_oracles: None,
                 };
@@ -272,9 +223,7 @@ impl Into<Order> for FatCrabOrder {
 
                 builder.taker_obligation(taker_obligation);
 
-                let trade_engine_specifics = FatCrabMakeOrderSpecifics {
-                    receive_address: bitcoin_addr,
-                };
+                let trade_engine_specifics = FatCrabMakeOrderSpecifics {};
                 builder.trade_engine_specifics(Box::new(trade_engine_specifics));
             }
         }

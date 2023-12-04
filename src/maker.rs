@@ -8,7 +8,7 @@ use tokio::sync::{mpsc, oneshot};
 use crate::error::FatCrabError;
 use crate::offer::{FatCrabOffer, FatCrabOfferEnvelope};
 use crate::order::FatCrabOrder;
-use crate::peer_msg::{FatCrabPeerEnvelope, FatCrabPeerMsg};
+use crate::peer_msg::{FatCrabPeerEnvelope, FatCrabPeerMessage};
 use crate::trade_rsp::{FatCrabMakeTradeRspSpecifics, FatCrabTradeRsp};
 
 pub enum FatCrabMakerNotif {
@@ -152,7 +152,7 @@ impl FatCrabMakerActor {
                 },
 
                 Some(offer_result) = offer_notif_rx.recv() => {
-                    let trade_uuid = self.order.trade_uuid();
+                    let trade_uuid = self.order.trade_uuid;
 
                     match offer_result {
                         Ok(n3xb_offer_envelope) => {
@@ -177,14 +177,15 @@ impl FatCrabMakerActor {
                 Some(peer_result) = peer_notif_rx.recv() => {
                     match peer_result {
                         Ok(n3xb_peer_envelope) => {
+                            let fatcrab_peer_msg = n3xb_peer_envelope.message.downcast_ref::<FatCrabPeerMessage>().unwrap().clone();
                             if let Some(notif_tx) = &self.notif_tx {
                                 let fatcrab_peer_envelope = FatCrabPeerEnvelope {
                                     envelope: n3xb_peer_envelope,
-                                    peer_msg: FatCrabPeerMsg {}
+                                    peer_msg: fatcrab_peer_msg
                                 };
                                 notif_tx.send(FatCrabMakerNotif::Peer(fatcrab_peer_envelope)).await.unwrap();
                             } else {
-                                warn!("Maker w/ TradeUUID {} do not have notif_tx registered", self.order.trade_uuid());
+                                warn!("Maker w/ TradeUUID {} do not have notif_tx registered", self.order.trade_uuid);
                             }
                         },
                         Err(error) => {
@@ -231,7 +232,7 @@ impl FatCrabMakerActor {
             let error = FatCrabError::Simple {
                 description: format!(
                     "Maker w/ TradeUUID {} already have notif_tx registered",
-                    self.order.trade_uuid()
+                    self.order.trade_uuid
                 ),
             };
             result = Err(error);
@@ -246,7 +247,7 @@ impl FatCrabMakerActor {
             let error = FatCrabError::Simple {
                 description: format!(
                     "Maker w/ TradeUUID {} expected to already have notif_tx registered",
-                    self.order.trade_uuid()
+                    self.order.trade_uuid
                 ),
             };
             result = Err(error);

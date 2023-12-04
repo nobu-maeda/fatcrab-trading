@@ -1,4 +1,3 @@
-use core::panic;
 use std::any::Any;
 
 use crusty_n3xb::{
@@ -6,7 +5,6 @@ use crusty_n3xb::{
     offer::{Obligation, Offer, OfferBuilder, OfferEnvelope},
 };
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{
     common::FATCRAB_OBLIGATION_CUSTOM_KIND_STRING,
@@ -15,9 +13,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct FatCrabTakeOrderSpecifics {
-    receive_address: String,
-}
+pub struct FatCrabTakeOrderSpecifics {}
 
 #[typetag::serde(name = "fatcrab_take_order_specifics")]
 impl SerdeGenericTrait for FatCrabTakeOrderSpecifics {
@@ -34,8 +30,8 @@ pub struct FatCrabOfferEnvelope {
 
 #[derive(Debug, Clone)]
 pub enum FatCrabOffer {
-    Buy { bitcoin_addr: String },
-    Sell { fatcrab_acct_id: Uuid },
+    Buy,
+    Sell,
 }
 
 impl FatCrabOffer {
@@ -97,98 +93,51 @@ impl FatCrabOffer {
             });
         }
 
-        let fatcrab_offer_specifics = offer
-            .trade_engine_specifics
-            .downcast_ref::<FatCrabTakeOrderSpecifics>()
-            .ok_or_else(|| FatCrabError::Simple {
-                description: "Offer Trade Engine Specifics not expected".to_string(),
-            })?;
-
-        let receive_address = fatcrab_offer_specifics.receive_address.clone();
-
-        let offer = match order_type {
-            FatCrabOrderType::Buy => Self::Buy {
-                bitcoin_addr: receive_address,
-            },
-            FatCrabOrderType::Sell => Self::Sell {
-                fatcrab_acct_id: Uuid::parse_str(&receive_address).map_err(|e| {
-                    FatCrabError::Simple {
-                        description: format!(
-                            "Offer Trade Engine Specifics Receive Address not a valid UUID: {}",
-                            e
-                        ),
-                    }
-                })?,
-            },
-        };
-
-        Ok(offer)
+        match order_type {
+            FatCrabOrderType::Buy => Ok(Self::Buy),
+            FatCrabOrderType::Sell => Ok(Self::Sell),
+        }
     }
 
     pub(crate) fn into_n3xb_offer(&self, order: FatCrabOrder) -> Offer {
         let mut builder = OfferBuilder::new();
 
         match self {
-            Self::Buy { bitcoin_addr } => match order {
-                FatCrabOrder::Sell { .. } => {
-                    panic!("FatCrab Buy Offer & FatCrab Sell Order mismatches");
-                }
-                FatCrabOrder::Buy {
-                    trade_uuid: _,
-                    amount,             // in FC
-                    price,              // in sats / FC
-                    fatcrab_acct_id: _, // Maker to rx FC
-                } => {
-                    let maker_obligation = Obligation {
-                        kind: ObligationKind::Bitcoin(Some(BitcoinSettlementMethod::Onchain)),
-                        amount: (amount * price).round(), // Sat amount in fraction is not allowed
-                        bond_amount: None,
-                    };
-                    let taker_obligation = Obligation {
-                        kind: ObligationKind::Custom(
-                            FATCRAB_OBLIGATION_CUSTOM_KIND_STRING.to_string(),
-                        ),
-                        amount: amount,
-                        bond_amount: None,
-                    };
-                    let specifics = FatCrabTakeOrderSpecifics {
-                        receive_address: bitcoin_addr.clone(),
-                    };
-                    builder.maker_obligation(maker_obligation);
-                    builder.taker_obligation(taker_obligation);
-                    builder.trade_engine_specifics(Box::new(specifics));
-                }
-            },
-            Self::Sell { fatcrab_acct_id } => match order {
-                FatCrabOrder::Buy { .. } => {
-                    panic!("FatCrab Sell Offer & FatCrab Buy Order mismatches");
-                }
-                FatCrabOrder::Sell {
-                    trade_uuid: _,
-                    amount,          // in FC
-                    price,           // in sats / FC
-                    bitcoin_addr: _, // Maker to rx Bitcoin
-                } => {
-                    let maker_obligation = Obligation {
-                        kind: ObligationKind::Custom(
-                            FATCRAB_OBLIGATION_CUSTOM_KIND_STRING.to_string(),
-                        ),
-                        amount,
-                        bond_amount: None,
-                    };
-                    let taker_obligation = Obligation {
-                        kind: ObligationKind::Bitcoin(Some(BitcoinSettlementMethod::Onchain)),
-                        amount: (amount * price).round(), // Sat amount in fraction is not allowed
-                        bond_amount: None,
-                    };
-                    let specifics = FatCrabTakeOrderSpecifics {
-                        receive_address: fatcrab_acct_id.to_string(),
-                    };
-                    builder.maker_obligation(maker_obligation);
-                    builder.taker_obligation(taker_obligation);
-                    builder.trade_engine_specifics(Box::new(specifics));
-                }
-            },
+            FatCrabOffer::Buy => {
+                assert_eq!(order.order_type, FatCrabOrderType::Buy);
+                let maker_obligation = Obligation {
+                    kind: ObligationKind::Bitcoin(Some(BitcoinSettlementMethod::Onchain)),
+                    amount: (order.amount * order.price).round(), // Sat amount in fraction is not allowed
+                    bond_amount: None,
+                };
+                let taker_obligation = Obligation {
+                    kind: ObligationKind::Custom(FATCRAB_OBLIGATION_CUSTOM_KIND_STRING.to_string()),
+                    amount: order.amount,
+                    bond_amount: None,
+                };
+                let specifics = FatCrabTakeOrderSpecifics {};
+                builder.maker_obligation(maker_obligation);
+                builder.taker_obligation(taker_obligation);
+                builder.trade_engine_specifics(Box::new(specifics));
+            }
+
+            FatCrabOffer::Sell => {
+                assert_eq!(order.order_type, FatCrabOrderType::Sell);
+                let maker_obligation = Obligation {
+                    kind: ObligationKind::Custom(FATCRAB_OBLIGATION_CUSTOM_KIND_STRING.to_string()),
+                    amount: order.amount,
+                    bond_amount: None,
+                };
+                let taker_obligation = Obligation {
+                    kind: ObligationKind::Bitcoin(Some(BitcoinSettlementMethod::Onchain)),
+                    amount: (order.amount * order.price).round(), // Sat amount in fraction is not allowed
+                    bond_amount: None,
+                };
+                let specifics = FatCrabTakeOrderSpecifics {};
+                builder.maker_obligation(maker_obligation);
+                builder.taker_obligation(taker_obligation);
+                builder.trade_engine_specifics(Box::new(specifics));
+            }
         }
         builder.build().unwrap()
     }

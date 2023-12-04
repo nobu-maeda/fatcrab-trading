@@ -9,7 +9,7 @@ use crate::{
     error::FatCrabError,
     offer::FatCrabOffer,
     order::FatCrabOrderEnvelope,
-    peer_msg::{FatCrabPeerEnvelope, FatCrabPeerMsg},
+    peer_msg::{FatCrabPeerEnvelope, FatCrabPeerMessage},
     trade_rsp::{FatCrabTradeRsp, FatCrabTradeRspEnvelope},
 };
 
@@ -137,7 +137,7 @@ impl FatCrabTakerActor {
                 },
 
                 Some(trade_rsp_result) = trade_rsp_notif_rx.recv() => {
-                    let trade_uuid = self.order.order.trade_uuid();
+                    let trade_uuid = self.order.order.trade_uuid;
 
                     match trade_rsp_result {
                         Ok(n3xb_trade_rsp_envelope) => {
@@ -158,11 +158,11 @@ impl FatCrabTakerActor {
                 },
 
                 Some(peer_result) = peer_notif_rx.recv() => {
-                    let trade_uuid = self.order.order.trade_uuid();
+                    let trade_uuid = self.order.order.trade_uuid;
 
                     match peer_result {
                         Ok(n3xb_peer_envelope) => {
-                            let fatcrab_peer_msg = n3xb_peer_envelope.message.downcast_ref::<FatCrabPeerMsg>().unwrap().clone();
+                            let fatcrab_peer_msg = n3xb_peer_envelope.message.downcast_ref::<FatCrabPeerMessage>().unwrap().clone();
                             if let Some(notif_tx) = &self.notif_tx {
                                 let fatcrab_peer_envelope = FatCrabPeerEnvelope {
                                     envelope: n3xb_peer_envelope,
@@ -192,7 +192,7 @@ impl FatCrabTakerActor {
             let error = FatCrabError::Simple {
                 description: format!(
                     "Taker w/ TradeUUID {} already have notif_tx registered",
-                    self.order.order.trade_uuid()
+                    self.order.order.trade_uuid
                 ),
             };
             result = Err(error);
@@ -207,7 +207,7 @@ impl FatCrabTakerActor {
             let error = FatCrabError::Simple {
                 description: format!(
                     "Taker w/ TradeUUID {} expected to already have notif_tx registered",
-                    self.order.order.trade_uuid()
+                    self.order.order.trade_uuid
                 ),
             };
             result = Err(error);

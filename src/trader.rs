@@ -72,7 +72,7 @@ impl FatCrabTrader {
             .await
             .unwrap();
 
-        let trade_uuid = order.trade_uuid().clone();
+        let trade_uuid = order.trade_uuid.clone();
         let maker = FatCrabMaker::new(order, n3xb_maker).await;
         let maker_accessor = maker.new_accessor();
         let maker_return_accessor = maker.new_accessor();
@@ -150,7 +150,7 @@ impl FatCrabTrader {
             .unwrap();
         n3xb_taker.take_order().await.unwrap();
 
-        let trade_uuid = order.order.trade_uuid().clone();
+        let trade_uuid = order.order.trade_uuid.clone();
         let taker = FatCrabTaker::new(offer, order, n3xb_taker).await;
         let taker_accessor = taker.new_accessor();
         let taker_return_accessor = taker.new_accessor();

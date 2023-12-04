@@ -56,11 +56,11 @@ mod test {
 
         // Maker - Create Fatcrab Trade Order
         let maker_receive_fatcrab_acct_id = Uuid::new_v4();
-        let order = FatCrabOrder::Buy {
+        let order = FatCrabOrder {
+            order_type: FatCrabOrderType::Buy,
             trade_uuid: Uuid::new_v4(),
             amount: 100.0,
             price: 1000.0,
-            fatcrab_acct_id: maker_receive_fatcrab_acct_id,
         };
 
         // Maker - Create Fatcrab Maker
@@ -79,10 +79,7 @@ mod test {
         assert_eq!(orders.len(), 1);
 
         // Taker - Create Fatcrab Take Trader & Take Trade Order
-        let taker_receive_bitcoin_addr = Uuid::new_v4().to_string();
-        let offer = FatCrabOffer::Buy {
-            bitcoin_addr: taker_receive_bitcoin_addr.clone(), // Use UUID as a placeholder of Bitcoin address
-        };
+        let offer = FatCrabOffer::Buy;
         let taker = trader_t.take_order(orders[0].clone(), offer).await;
 
         let (taker_notif_tx, mut taker_notif_rx) =
@@ -94,10 +91,7 @@ mod test {
 
         let offer_envelope = match maker_notif {
             FatCrabMakerNotif::Offer(offer_envelope) => match offer_envelope.offer.clone() {
-                FatCrabOffer::Buy { bitcoin_addr } => {
-                    assert_eq!(bitcoin_addr, taker_receive_bitcoin_addr);
-                    offer_envelope
-                }
+                FatCrabOffer::Buy => offer_envelope,
                 _ => {
                     panic!("Maker only expects Buy Offer Notif at this point");
                 }
