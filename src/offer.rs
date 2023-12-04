@@ -32,11 +32,97 @@ pub enum FatCrabOffer {
 }
 
 impl FatCrabOffer {
+    pub(crate) fn from_n3xb_offer(offer: Offer) -> Result<Self, FatCrabError> {
+        let order_type = match &offer.maker_obligation.kind {
+            ObligationKind::Bitcoin { .. } => FatCrabOrderType::Buy,
+            ObligationKind::Custom(kind) => {
+                if kind == FATCRAB_OBLIGATION_CUSTOM_KIND_STRING {
+                    FatCrabOrderType::Sell
+                } else {
+                    return Err(FatCrabError::Simple {
+                        description: format!(
+                            "Offer Maker Obligation Kind Custom for {} not expected",
+                            kind
+                        ),
+                    });
+                }
+            }
+            ObligationKind::Fiat(currency, _method) => {
+                return Err(FatCrabError::Simple {
+                    description: format!(
+                        "Offer Maker Obligation Kind Fiat for {} not expected",
+                        currency
+                    ),
+                });
+            }
+        };
+
+        let internal_inconsistent = match &offer.taker_obligation.kind {
+            ObligationKind::Bitcoin { .. } => order_type != FatCrabOrderType::Sell,
+            ObligationKind::Custom(kind) => {
+                if kind == FATCRAB_OBLIGATION_CUSTOM_KIND_STRING {
+                    order_type != FatCrabOrderType::Buy
+                } else {
+                    return Err(FatCrabError::Simple {
+                        description: format!(
+                            "Offer Taker Obligation Kind Custom for {} not expected",
+                            kind
+                        ),
+                    });
+                }
+            }
+            ObligationKind::Fiat(currency, _method) => {
+                return Err(FatCrabError::Simple {
+                    description: format!(
+                        "Offer Taker Obligation Kind Fiat for {} not expected",
+                        currency
+                    ),
+                });
+            }
+        };
+
+        if internal_inconsistent {
+            return Err(FatCrabError::Simple {
+                description: format!(
+                    "Offer Obligation Kinds internally inconsistent - Maker: {:?}, Taker: {:?}",
+                    offer.maker_obligation.kind, offer.taker_obligation.kind
+                ),
+            });
+        }
+
+        let fatcrab_offer_specifics = offer
+            .trade_engine_specifics
+            .downcast_ref::<FatCrabTakeOrderSpecifics>()
+            .ok_or_else(|| FatCrabError::Simple {
+                description: "Offer Trade Engine Specifics not expected".to_string(),
+            })?;
+
+        let receive_address = fatcrab_offer_specifics.receive_address.clone();
+
+        let offer = match order_type {
+            FatCrabOrderType::Buy => Self::Buy {
+                bitcoin_addr: receive_address,
+            },
+            FatCrabOrderType::Sell => Self::Sell {
+                fatcrab_acct_id: Uuid::parse_str(&receive_address).map_err(|e| {
+                    FatCrabError::Simple {
+                        description: format!(
+                            "Offer Trade Engine Specifics Receive Address not a valid UUID: {}",
+                            e
+                        ),
+                    }
+                })?,
+            },
+        };
+
+        Ok(offer)
+    }
+
     pub(crate) fn into(&self, order: FatCrabOrder) -> Offer {
         let mut builder = OfferBuilder::new();
 
         match self {
-            FatCrabOffer::Buy { bitcoin_addr } => match order {
+            Self::Buy { bitcoin_addr } => match order {
                 FatCrabOrder::Sell { .. } => {
                     panic!("FatCrab Buy Offer & FatCrab Sell Order mismatches");
                 }
@@ -65,7 +151,7 @@ impl FatCrabOffer {
                     builder.trade_engine_specifics(Box::new(specifics));
                 }
             },
-            FatCrabOffer::Sell { fatcrab_acct_id } => match order {
+            Self::Sell { fatcrab_acct_id } => match order {
                 FatCrabOrder::Buy { .. } => {
                     panic!("FatCrab Sell Offer & FatCrab Buy Order mismatches");
                 }

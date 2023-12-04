@@ -140,7 +140,7 @@ impl FatCrabOrder {
 
             match fatcrab_order_kind {
                 FatCrabOrderType::Buy => {
-                    return Ok(FatCrabOrder::Buy {
+                    return Ok(Self::Buy {
                         amount,
                         price,
                         fatcrab_acct_id: Uuid::parse_str(
@@ -150,7 +150,7 @@ impl FatCrabOrder {
                     })
                 }
                 FatCrabOrderType::Sell => {
-                    return Ok(FatCrabOrder::Sell {
+                    return Ok(Self::Sell {
                         amount,
                         price,
                         bitcoin_addr: fatcrab_specifics.receive_address.clone(),
@@ -170,7 +170,7 @@ impl Into<Order> for FatCrabOrder {
         let mut builder = OrderBuilder::new();
 
         match self {
-            FatCrabOrder::Buy {
+            Self::Buy {
                 amount,
                 price,
                 fatcrab_acct_id,
@@ -212,7 +212,7 @@ impl Into<Order> for FatCrabOrder {
                 };
                 builder.trade_engine_specifics(Box::new(trade_engine_specifics));
             }
-            FatCrabOrder::Sell {
+            Self::Sell {
                 amount,
                 price,
                 bitcoin_addr,
