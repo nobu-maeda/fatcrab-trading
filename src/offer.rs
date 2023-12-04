@@ -127,9 +127,10 @@ impl FatCrabOffer {
                     panic!("FatCrab Buy Offer & FatCrab Sell Order mismatches");
                 }
                 FatCrabOrder::Buy {
-                    amount,          // in FC
-                    price,           // in sats / FC
-                    fatcrab_acct_id, // Maker to rx FC
+                    trade_uuid: _,
+                    amount,             // in FC
+                    price,              // in sats / FC
+                    fatcrab_acct_id: _, // Maker to rx FC
                 } => {
                     let maker_obligation = Obligation {
                         kind: ObligationKind::Bitcoin(Some(BitcoinSettlementMethod::Onchain)),
@@ -156,9 +157,10 @@ impl FatCrabOffer {
                     panic!("FatCrab Sell Offer & FatCrab Buy Order mismatches");
                 }
                 FatCrabOrder::Sell {
-                    amount,       // in FC
-                    price,        // in sats / FC
-                    bitcoin_addr, // Maker to rx Bitcoin
+                    trade_uuid: _,
+                    amount,          // in FC
+                    price,           // in sats / FC
+                    bitcoin_addr: _, // Maker to rx Bitcoin
                 } => {
                     let maker_obligation = Obligation {
                         kind: ObligationKind::Custom(

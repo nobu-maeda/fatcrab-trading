@@ -7,6 +7,7 @@ mod test {
     use uuid::Uuid;
 
     use fatcrab_trading::{
+        maker::FatCrabMakerNotif,
         offer::FatCrabOffer,
         order::{FatCrabOrder, FatCrabOrderType},
         trader::FatCrabTrader,
@@ -53,6 +54,7 @@ mod test {
 
         // Maker - Create Fatcrab Trade Order
         let trade_order = FatCrabOrder::Buy {
+            trade_uuid: Uuid::new_v4(),
             amount: 100.0,
             price: 1000.0,
             fatcrab_acct_id: Uuid::new_v4(),
@@ -62,7 +64,8 @@ mod test {
         let maker = trader_m.make_order(trade_order).await;
 
         // Maker - Create channels & register Notif Tx
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<FatCrabOffer>(5);
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<FatCrabMakerNotif>(5);
+        maker.register_notif_tx(tx).await.unwrap();
 
         // Taker - Query Fatcrab Trade Order
         let orders = trader_t.query_orders(FatCrabOrderType::Sell).await.unwrap();

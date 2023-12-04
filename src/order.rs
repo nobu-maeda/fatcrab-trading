@@ -34,11 +34,13 @@ pub enum FatCrabOrderType {
 #[derive(Clone)]
 pub enum FatCrabOrder {
     Buy {
+        trade_uuid: Uuid,
         amount: f64,           // in FC
         price: f64,            // in sats / FC
         fatcrab_acct_id: Uuid, // to receive FCs
     },
     Sell {
+        trade_uuid: Uuid,
         amount: f64,          // in FC
         price: f64,           // in sats / FC
         bitcoin_addr: String, // to receive BTC
@@ -52,6 +54,13 @@ pub enum FatCrabOrder {
 // n3xB Orders - Maker Obligation in FC, Amount in FC, receives sats. Taker Obligation BTC, Limit rate in #Sats/#FC = Price
 
 impl FatCrabOrder {
+    pub fn trade_uuid(&self) -> &Uuid {
+        match self {
+            Self::Buy { trade_uuid, .. } => trade_uuid,
+            Self::Sell { trade_uuid, .. } => trade_uuid,
+        }
+    }
+
     pub(crate) fn from_n3xb_order(order: Order) -> Result<Self, FatCrabError> {
         let mut amount: Option<f64> = None;
         let mut price: Option<f64> = None;
@@ -141,6 +150,7 @@ impl FatCrabOrder {
             match fatcrab_order_kind {
                 FatCrabOrderType::Buy => {
                     return Ok(Self::Buy {
+                        trade_uuid: order.trade_uuid,
                         amount,
                         price,
                         fatcrab_acct_id: Uuid::parse_str(
@@ -151,6 +161,7 @@ impl FatCrabOrder {
                 }
                 FatCrabOrderType::Sell => {
                     return Ok(Self::Sell {
+                        trade_uuid: order.trade_uuid,
                         amount,
                         price,
                         bitcoin_addr: fatcrab_specifics.receive_address.clone(),
@@ -171,10 +182,13 @@ impl Into<Order> for FatCrabOrder {
 
         match self {
             Self::Buy {
+                trade_uuid,
                 amount,
                 price,
                 fatcrab_acct_id,
             } => {
+                builder.trade_uuid(trade_uuid);
+
                 let maker_obligation_kind =
                     ObligationKind::Bitcoin(Some(BitcoinSettlementMethod::Onchain));
                 let maker_obligation_kinds =
@@ -213,10 +227,13 @@ impl Into<Order> for FatCrabOrder {
                 builder.trade_engine_specifics(Box::new(trade_engine_specifics));
             }
             Self::Sell {
+                trade_uuid,
                 amount,
                 price,
                 bitcoin_addr,
             } => {
+                builder.trade_uuid(trade_uuid);
+
                 let maker_obligation_kind = ObligationKind::Custom("FatCrab".to_string());
                 let maker_obligation_kinds =
                     HashSet::from_iter(vec![maker_obligation_kind].into_iter());
