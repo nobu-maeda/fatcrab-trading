@@ -8,7 +8,7 @@ use tokio::sync::{mpsc, oneshot};
 use crate::error::FatCrabError;
 use crate::offer::{FatCrabOffer, FatCrabOfferEnvelope};
 use crate::order::FatCrabOrder;
-use crate::peer_msg::{FatCrabPeerEnvelope, FatCrabPeerMessage};
+use crate::peer::{FatCrabPeerEnvelope, FatCrabPeerMessage};
 use crate::trade_rsp::{FatCrabMakeTradeRspSpecifics, FatCrabTradeRsp};
 
 pub enum FatCrabMakerNotif {
@@ -184,11 +184,11 @@ impl FatCrabMakerActor {
                 Some(peer_result) = peer_notif_rx.recv() => {
                     match peer_result {
                         Ok(n3xb_peer_envelope) => {
-                            let fatcrab_peer_msg = n3xb_peer_envelope.message.downcast_ref::<FatCrabPeerMessage>().unwrap().clone();
+                            let fatcrab_peer_message = n3xb_peer_envelope.message.downcast_ref::<FatCrabPeerMessage>().unwrap().clone();
                             if let Some(notif_tx) = &self.notif_tx {
                                 let fatcrab_peer_envelope = FatCrabPeerEnvelope {
                                     envelope: n3xb_peer_envelope,
-                                    peer_msg: fatcrab_peer_msg
+                                    message: fatcrab_peer_message
                                 };
                                 notif_tx.send(FatCrabMakerNotif::Peer(fatcrab_peer_envelope)).await.unwrap();
                             } else {

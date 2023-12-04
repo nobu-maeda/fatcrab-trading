@@ -105,14 +105,12 @@ mod test {
         let taker_notif = taker_notif_rx.recv().await.unwrap();
 
         match taker_notif {
-            FatCrabTakerNotif::TradeResponse { trade_rsp_envelope } => {
-                match trade_rsp_envelope.trade_rsp {
-                    FatCrabTradeRsp::Accept => {}
-                    _ => {
-                        panic!("Taker only expects Accepted Trade Response at this point");
-                    }
+            FatCrabTakerNotif::TradeRsp(trade_rsp_envelope) => match trade_rsp_envelope.trade_rsp {
+                FatCrabTradeRsp::Accept => {}
+                _ => {
+                    panic!("Taker only expects Accepted Trade Response at this point");
                 }
-            }
+            },
             _ => {
                 panic!("Taker only expects Accepted Trade Response at this point");
             }

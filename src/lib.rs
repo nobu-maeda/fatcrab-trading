@@ -3,7 +3,7 @@ pub mod error;
 pub mod maker;
 pub mod offer;
 pub mod order;
-pub mod peer_msg;
+pub mod peer;
 pub mod taker;
 pub mod trade_rsp;
 pub mod trader;

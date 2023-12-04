@@ -7,19 +7,14 @@ use tokio::{
 
 use crate::{
     error::FatCrabError,
-    offer::FatCrabOffer,
     order::FatCrabOrderEnvelope,
-    peer_msg::{FatCrabPeerEnvelope, FatCrabPeerMessage},
+    peer::{FatCrabPeerEnvelope, FatCrabPeerMessage},
     trade_rsp::{FatCrabTradeRsp, FatCrabTradeRspEnvelope},
 };
 
 pub enum FatCrabTakerNotif {
-    TradeResponse {
-        trade_rsp_envelope: FatCrabTradeRspEnvelope,
-    },
-    PeerMessage {
-        peer_msg_envelope: FatCrabPeerEnvelope,
-    },
+    TradeRsp(FatCrabTradeRspEnvelope),
+    Peer(FatCrabPeerEnvelope),
 }
 
 #[derive(Clone)]
@@ -139,7 +134,7 @@ impl FatCrabTakerActor {
                                     envelope: n3xb_trade_rsp_envelope.clone(),
                                     trade_rsp: FatCrabTradeRsp::from_n3xb_trade_rsp( n3xb_trade_rsp_envelope.trade_rsp)
                                 };
-                                notif_tx.send(FatCrabTakerNotif::TradeResponse { trade_rsp_envelope: fatcrab_trade_rsp_envelope }).await.unwrap();
+                                notif_tx.send(FatCrabTakerNotif::TradeRsp(fatcrab_trade_rsp_envelope)).await.unwrap();
                             } else {
                                 warn!("Taker w/ TradeUUID {} do not have notif_tx registered", trade_uuid.to_string());
                             }
@@ -155,13 +150,13 @@ impl FatCrabTakerActor {
 
                     match peer_result {
                         Ok(n3xb_peer_envelope) => {
-                            let fatcrab_peer_msg = n3xb_peer_envelope.message.downcast_ref::<FatCrabPeerMessage>().unwrap().clone();
+                            let fatcrab_peer_message = n3xb_peer_envelope.message.downcast_ref::<FatCrabPeerMessage>().unwrap().clone();
                             if let Some(notif_tx) = &self.notif_tx {
                                 let fatcrab_peer_envelope = FatCrabPeerEnvelope {
                                     envelope: n3xb_peer_envelope,
-                                    peer_msg: fatcrab_peer_msg
+                                    message: fatcrab_peer_message
                                 };
-                                notif_tx.send(FatCrabTakerNotif::PeerMessage { peer_msg_envelope: fatcrab_peer_envelope }).await.unwrap();
+                                notif_tx.send(FatCrabTakerNotif::Peer(fatcrab_peer_envelope)).await.unwrap();
                             } else {
                                 warn!("Taker w/ TradeUUID {} do not have notif_tx registered", trade_uuid.to_string());
                             }
