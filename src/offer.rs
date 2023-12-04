@@ -3,7 +3,7 @@ use std::any::Any;
 
 use crusty_n3xb::{
     common::types::{BitcoinSettlementMethod, ObligationKind, SerdeGenericTrait},
-    offer::{Obligation, Offer, OfferBuilder},
+    offer::{Obligation, Offer, OfferBuilder, OfferEnvelope},
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -26,6 +26,13 @@ impl SerdeGenericTrait for FatCrabTakeOrderSpecifics {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct FatCrabOfferEnvelope {
+    pub offer: Offer,
+    pub(crate) envelope: OfferEnvelope,
+}
+
+#[derive(Debug, Clone)]
 pub enum FatCrabOffer {
     Buy { bitcoin_addr: String },
     Sell { fatcrab_acct_id: Uuid },
@@ -118,7 +125,7 @@ impl FatCrabOffer {
         Ok(offer)
     }
 
-    pub(crate) fn into(&self, order: FatCrabOrder) -> Offer {
+    pub(crate) fn into_n3xb_offer(&self, order: FatCrabOrder) -> Offer {
         let mut builder = OfferBuilder::new();
 
         match self {

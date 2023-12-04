@@ -6,8 +6,8 @@ use uuid::Uuid;
 use crusty_n3xb::{
     common::types::{BitcoinSettlementMethod, ObligationKind, SerdeGenericTrait},
     order::{
-        MakerObligation, MakerObligationContent, Order, OrderBuilder, TakerObligation,
-        TakerObligationContent, TradeDetails, TradeDetailsContent, TradeParameter,
+        MakerObligation, MakerObligationContent, Order, OrderBuilder, OrderEnvelope,
+        TakerObligation, TakerObligationContent, TradeDetails, TradeDetailsContent, TradeParameter,
     },
 };
 
@@ -31,7 +31,13 @@ pub enum FatCrabOrderType {
     Sell,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
+pub struct FatCrabOrderEnvelope {
+    pub order: FatCrabOrder,
+    pub(crate) envelope: OrderEnvelope,
+}
+
+#[derive(Debug, Clone)]
 pub enum FatCrabOrder {
     Buy {
         trade_uuid: Uuid,

@@ -16,7 +16,8 @@ use crate::{
     common::FATCRAB_OBLIGATION_CUSTOM_KIND_STRING,
     error::FatCrabError,
     maker::{FatCrabMaker, FatCrabMakerAccess},
-    order::{FatCrabOrder, FatCrabOrderType},
+    offer::FatCrabOffer,
+    order::{FatCrabOrder, FatCrabOrderEnvelope, FatCrabOrderType},
     taker::{FatCrabTaker, FatCrabTakerAccess},
 };
 
@@ -92,7 +93,7 @@ impl FatCrabTrader {
     pub async fn query_orders(
         &self,
         order_type: FatCrabOrderType,
-    ) -> Result<Vec<FatCrabOrder>, FatCrabError> {
+    ) -> Result<Vec<FatCrabOrderEnvelope>, FatCrabError> {
         let custom_fatcrab_obligation_kind: ObligationKind =
             ObligationKind::Custom(FATCRAB_OBLIGATION_CUSTOM_KIND_STRING.to_string());
         let bitcoin_onchain_obligation_kind: ObligationKind =
@@ -124,17 +125,47 @@ impl FatCrabTrader {
         }
 
         let n3xb_orders = self.n3xb_manager.query_orders(filter_tags).await?;
-        let order: Vec<FatCrabOrder> = n3xb_orders
+        let orders: Vec<FatCrabOrderEnvelope> = n3xb_orders
             .into_iter()
-            .map(|envelope| FatCrabOrder::from_n3xb_order(envelope.order).unwrap())
+            .map(|envelope| FatCrabOrderEnvelope {
+                order: FatCrabOrder::from_n3xb_order(envelope.order.clone()).unwrap(),
+                envelope,
+            })
             .collect();
-
-        Ok(order)
+        Ok(orders)
     }
 
-    pub fn take_order(&self) -> FatCrabTakerAccess {
-        println!("Taking order");
-        FatCrabTakerAccess {}
+    pub async fn take_order(
+        &self,
+        order: FatCrabOrderEnvelope,
+        offer: FatCrabOffer,
+    ) -> FatCrabTakerAccess {
+        let n3xb_taker = self
+            .n3xb_manager
+            .new_taker(
+                order.envelope.clone(),
+                offer.into_n3xb_offer(order.order.clone()),
+            )
+            .await
+            .unwrap();
+        n3xb_taker.take_order().await.unwrap();
+
+        let trade_uuid = order.order.trade_uuid().clone();
+        let taker = FatCrabTaker::new(offer, order, n3xb_taker).await;
+        let taker_accessor = taker.new_accessor();
+        let taker_return_accessor = taker.new_accessor();
+
+        self.takers
+            .write()
+            .unwrap()
+            .insert(trade_uuid.clone(), taker);
+
+        self.taker_accessors
+            .write()
+            .unwrap()
+            .insert(trade_uuid, taker_accessor);
+
+        taker_return_accessor
     }
 
     pub fn shutdown(self) {}

@@ -1,14 +1,13 @@
 use tokio::sync::{mpsc, oneshot};
-use uuid::Uuid;
 
 use crusty_n3xb::machine::maker::MakerAccess;
 
 use crate::error::FatCrabError;
-use crate::offer::FatCrabOffer;
+use crate::offer::FatCrabOfferEnvelope;
 use crate::order::FatCrabOrder;
 
 pub enum FatCrabMakerNotif {
-    Offer(FatCrabOffer),
+    Offer(FatCrabOfferEnvelope),
 }
 
 #[derive(Clone)]
@@ -17,10 +16,6 @@ pub struct FatCrabMakerAccess {
 }
 
 impl FatCrabMakerAccess {
-    async fn new(tx: mpsc::Sender<FatCrabMakerRequest>) -> Self {
-        Self { tx }
-    }
-
     pub async fn register_notif_tx(
         &self,
         tx: mpsc::Sender<FatCrabMakerNotif>,
@@ -102,10 +97,10 @@ impl FatCrabMakerActor {
         while let Some(req) = self.rx.recv().await {
             match req {
                 FatCrabMakerRequest::RegisterNotifTx { tx, rsp_tx } => {
-                    self.register_notif_tx(tx, rsp_tx);
+                    self.register_notif_tx(tx, rsp_tx).await;
                 }
                 FatCrabMakerRequest::UnregisterNotifTx { rsp_tx } => {
-                    self.unregister_notif_tx(rsp_tx);
+                    self.unregister_notif_tx(rsp_tx).await;
                 }
             }
         }

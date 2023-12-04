@@ -36,10 +36,10 @@ mod test {
         relay.wait_for_healthy_relay().await.unwrap();
         relays.push(relay);
 
-        // Maker - Create Fatcrab Trader
+        // Maker - Create Fatcrab Trader for Maker
         let trader_m = FatCrabTrader::new().await;
 
-        // Taker - Create Fatcrab Trader
+        // Taker - Create Fatcrab Trader fOR Taker
         let trader_t = FatCrabTrader::new().await;
 
         // Add Relays
@@ -53,15 +53,15 @@ mod test {
         trader_t.add_relays(relay_addrs).await.unwrap();
 
         // Maker - Create Fatcrab Trade Order
-        let trade_order = FatCrabOrder::Buy {
+        let order = FatCrabOrder::Buy {
             trade_uuid: Uuid::new_v4(),
             amount: 100.0,
             price: 1000.0,
             fatcrab_acct_id: Uuid::new_v4(),
         };
 
-        // Maker - Create Fatcrab Make Trader
-        let maker = trader_m.make_order(trade_order).await;
+        // Maker - Create Fatcrab Maker
+        let maker = trader_m.make_order(order).await;
 
         // Maker - Create channels & register Notif Tx
         let (tx, mut rx) = tokio::sync::mpsc::channel::<FatCrabMakerNotif>(5);
@@ -75,6 +75,10 @@ mod test {
         assert_eq!(orders.len(), 1);
 
         // Taker - Create Fatcrab Take Trader & Take Trade Order
+        let offer = FatCrabOffer::Buy {
+            bitcoin_addr: Uuid::new_v4().to_string(), // Use UUID as a placeholder of Bitcoin address
+        };
+        let taker = trader_t.take_order(orders[0].clone(), offer).await;
 
         // Maker - Wait for Fatcrab Trader Order to be taken
 
