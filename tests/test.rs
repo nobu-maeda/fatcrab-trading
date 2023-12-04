@@ -8,7 +8,6 @@ mod test {
 
     use fatcrab_trading::{
         maker::FatCrabMakerNotif,
-        offer::FatCrabOffer,
         order::{FatCrabOrder, FatCrabOrderType},
         taker::FatCrabTakerNotif,
         trade_rsp::FatCrabTradeRsp,
@@ -79,8 +78,7 @@ mod test {
         assert_eq!(orders.len(), 1);
 
         // Taker - Create Fatcrab Take Trader & Take Trade Order
-        let offer = FatCrabOffer::Buy;
-        let taker = trader_t.take_order(orders[0].clone(), offer).await;
+        let taker = trader_t.take_order(orders[0].clone()).await;
 
         let (taker_notif_tx, mut taker_notif_rx) =
             tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
@@ -90,12 +88,7 @@ mod test {
         let maker_notif = maker_notif_rx.recv().await.unwrap();
 
         let offer_envelope = match maker_notif {
-            FatCrabMakerNotif::Offer(offer_envelope) => match offer_envelope.offer.clone() {
-                FatCrabOffer::Buy => offer_envelope,
-                _ => {
-                    panic!("Maker only expects Buy Offer Notif at this point");
-                }
-            },
+            FatCrabMakerNotif::Offer(offer_envelope) => offer_envelope,
             _ => {
                 panic!("Maker only expects Buy Offer Notif at this point");
             }

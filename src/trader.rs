@@ -135,23 +135,19 @@ impl FatCrabTrader {
         Ok(orders)
     }
 
-    pub async fn take_order(
-        &self,
-        order: FatCrabOrderEnvelope,
-        offer: FatCrabOffer,
-    ) -> FatCrabTakerAccess {
+    pub async fn take_order(&self, order: FatCrabOrderEnvelope) -> FatCrabTakerAccess {
         let n3xb_taker = self
             .n3xb_manager
             .new_taker(
                 order.envelope.clone(),
-                offer.into_n3xb_offer(order.order.clone()),
+                FatCrabOffer::create_n3xb_offer(order.order.clone()),
             )
             .await
             .unwrap();
         n3xb_taker.take_order().await.unwrap();
 
         let trade_uuid = order.order.trade_uuid.clone();
-        let taker = FatCrabTaker::new(offer, order, n3xb_taker).await;
+        let taker = FatCrabTaker::new(order, n3xb_taker).await;
         let taker_accessor = taker.new_accessor();
         let taker_return_accessor = taker.new_accessor();
 

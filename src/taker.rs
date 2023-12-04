@@ -58,13 +58,9 @@ pub(crate) struct FatCrabTaker {
 impl FatCrabTaker {
     const TAKE_TRADE_REQUEST_CHANNEL_SIZE: usize = 10;
 
-    pub(crate) async fn new(
-        offer: FatCrabOffer,
-        order: FatCrabOrderEnvelope,
-        n3xb_taker: TakerAccess,
-    ) -> Self {
+    pub(crate) async fn new(order: FatCrabOrderEnvelope, n3xb_taker: TakerAccess) -> Self {
         let (tx, rx) = mpsc::channel::<FatCrabTakerRequest>(Self::TAKE_TRADE_REQUEST_CHANNEL_SIZE);
-        let mut actor = FatCrabTakerActor::new(rx, offer, order, n3xb_taker).await;
+        let mut actor = FatCrabTakerActor::new(rx, order, n3xb_taker).await;
         let task_handle = tokio::spawn(async move { actor.run().await });
         Self { tx, task_handle }
     }
@@ -89,7 +85,6 @@ enum FatCrabTakerRequest {
 struct FatCrabTakerActor {
     rx: mpsc::Receiver<FatCrabTakerRequest>,
     notif_tx: Option<mpsc::Sender<FatCrabTakerNotif>>,
-    offer: FatCrabOffer,
     order: FatCrabOrderEnvelope,
     n3xb_taker: TakerAccess,
 }
@@ -97,14 +92,12 @@ struct FatCrabTakerActor {
 impl FatCrabTakerActor {
     async fn new(
         rx: mpsc::Receiver<FatCrabTakerRequest>,
-        offer: FatCrabOffer,
         order: FatCrabOrderEnvelope,
         n3xb_taker: TakerAccess,
     ) -> Self {
         Self {
             rx,
             notif_tx: None,
-            offer,
             order,
             n3xb_taker,
         }

@@ -156,15 +156,22 @@ impl FatCrabMakerActor {
 
                     match offer_result {
                         Ok(n3xb_offer_envelope) => {
-                            if let Some(notif_tx) = &self.notif_tx {
-                                let n3xb_offer = n3xb_offer_envelope.offer.clone();
-                                let fatcrab_offer_envelope = FatCrabOfferEnvelope {
-                                    envelope: n3xb_offer_envelope,
-                                    offer: FatCrabOffer::from_n3xb_offer(n3xb_offer).unwrap(),
-                                };
-                                notif_tx.send(FatCrabMakerNotif::Offer(fatcrab_offer_envelope)).await.unwrap();
-                            } else {
-                                warn!("Maker w/ TradeUUID {} do not have notif_tx registered", trade_uuid.to_string());
+                            let n3xb_offer = n3xb_offer_envelope.offer.clone();
+                            match FatCrabOffer::validate_n3xb_offer(n3xb_offer) {
+                                Ok(_) => {
+                                    if let Some(notif_tx) = &self.notif_tx {
+                                        let fatcrab_offer_envelope = FatCrabOfferEnvelope {
+                                            envelope: n3xb_offer_envelope,
+                                        };
+                                        notif_tx.send(FatCrabMakerNotif::Offer(fatcrab_offer_envelope)).await.unwrap();
+                                    } else {
+                                        warn!("Maker w/ TradeUUID {} do not have notif_tx registered", trade_uuid.to_string());
+                                    }
+                                },
+                                Err(error) => {
+                                    error!("Maker w/ TradeUUID {} Offer Validation Error - {}", trade_uuid.to_string(), error.to_string());
+                                    continue;
+                                }
                             }
                         },
                         Err(error) => {
