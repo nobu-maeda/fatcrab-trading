@@ -53,9 +53,13 @@ pub(crate) struct FatCrabTaker {
 impl FatCrabTaker {
     const TAKE_TRADE_REQUEST_CHANNEL_SIZE: usize = 10;
 
-    pub(crate) async fn new(order: FatCrabOrderEnvelope, n3xb_taker: TakerAccess) -> Self {
+    pub(crate) async fn new(
+        order: FatCrabOrderEnvelope,
+        receive_address: impl Into<String>,
+        n3xb_taker: TakerAccess,
+    ) -> Self {
         let (tx, rx) = mpsc::channel::<FatCrabTakerRequest>(Self::TAKE_TRADE_REQUEST_CHANNEL_SIZE);
-        let mut actor = FatCrabTakerActor::new(rx, order, n3xb_taker).await;
+        let mut actor = FatCrabTakerActor::new(rx, order, receive_address, n3xb_taker).await;
         let task_handle = tokio::spawn(async move { actor.run().await });
         Self { tx, task_handle }
     }
@@ -81,6 +85,7 @@ struct FatCrabTakerActor {
     rx: mpsc::Receiver<FatCrabTakerRequest>,
     notif_tx: Option<mpsc::Sender<FatCrabTakerNotif>>,
     order: FatCrabOrderEnvelope,
+    receive_address: String,
     n3xb_taker: TakerAccess,
 }
 
@@ -88,12 +93,14 @@ impl FatCrabTakerActor {
     async fn new(
         rx: mpsc::Receiver<FatCrabTakerRequest>,
         order: FatCrabOrderEnvelope,
+        receive_address: impl Into<String>,
         n3xb_taker: TakerAccess,
     ) -> Self {
         Self {
             rx,
             notif_tx: None,
             order,
+            receive_address: receive_address.into(),
             n3xb_taker,
         }
     }
@@ -132,7 +139,7 @@ impl FatCrabTakerActor {
                             if let Some(notif_tx) = &self.notif_tx {
                                 let fatcrab_trade_rsp_envelope = FatCrabTradeRspEnvelope {
                                     envelope: n3xb_trade_rsp_envelope.clone(),
-                                    trade_rsp: FatCrabTradeRsp::from_n3xb_trade_rsp( n3xb_trade_rsp_envelope.trade_rsp)
+                                    trade_rsp: FatCrabTradeRsp::from_n3xb_trade_rsp(n3xb_trade_rsp_envelope.trade_rsp)
                                 };
                                 notif_tx.send(FatCrabTakerNotif::TradeRsp(fatcrab_trade_rsp_envelope)).await.unwrap();
                             } else {

@@ -54,7 +54,7 @@ mod test {
         trader_t.add_relays(relay_addrs).await.unwrap();
 
         // Maker - Create Fatcrab Trade Order
-        let maker_receive_fatcrab_acct_id = Uuid::new_v4();
+        let maker_receive_fatcrab_acct_id = Uuid::new_v4().to_string();
         let order = FatCrabOrder {
             order_type: FatCrabOrderType::Buy,
             trade_uuid: Uuid::new_v4(),
@@ -63,7 +63,9 @@ mod test {
         };
 
         // Maker - Create Fatcrab Maker
-        let maker = trader_m.make_order(order).await;
+        let maker = trader_m
+            .make_order(order, maker_receive_fatcrab_acct_id.clone())
+            .await;
 
         // Maker - Create channels & register Notif Tx
         let (maker_notif_tx, mut maker_notif_rx) =
@@ -78,7 +80,10 @@ mod test {
         assert_eq!(orders.len(), 1);
 
         // Taker - Create Fatcrab Take Trader & Take Trade Order
-        let taker = trader_t.take_order(orders[0].clone()).await;
+        let taker_receive_bitcoin_addr = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"; // TODO: Placeholder. Taker should generate with internal wallet
+        let taker = trader_t
+            .take_order(orders[0].clone(), taker_receive_bitcoin_addr)
+            .await;
 
         let (taker_notif_tx, mut taker_notif_rx) =
             tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
@@ -95,7 +100,7 @@ mod test {
         };
 
         // Maker - Send Fatcrab Trade Response w/ Fatcrab address
-        let trade_rsp = FatCrabTradeRsp::Accept;
+        let trade_rsp = FatCrabTradeRsp::Accept(maker_receive_fatcrab_acct_id.to_string());
         maker
             .trade_response(trade_rsp, offer_envelope)
             .await
@@ -104,9 +109,9 @@ mod test {
         // Taker - Wait for Fatcrab Trade Response
         let taker_notif = taker_notif_rx.recv().await.unwrap();
 
-        match taker_notif {
+        let maker_remitted_fatcrab_acct_id_string = match taker_notif {
             FatCrabTakerNotif::TradeRsp(trade_rsp_envelope) => match trade_rsp_envelope.trade_rsp {
-                FatCrabTradeRsp::Accept => {}
+                FatCrabTradeRsp::Accept(receive_address) => receive_address,
                 _ => {
                     panic!("Taker only expects Accepted Trade Response at this point");
                 }
@@ -114,9 +119,13 @@ mod test {
             _ => {
                 panic!("Taker only expects Accepted Trade Response at this point");
             }
-        }
+        };
+        assert_eq!(
+            maker_remitted_fatcrab_acct_id_string,
+            maker_receive_fatcrab_acct_id
+        );
 
-        // Taker - Signal user to remit Fatcrab
+        // Taker - User to remit Fatcrab
 
         // Taker - User claims Fatcrab remittance, send Peer Message with Bitcoin address
 

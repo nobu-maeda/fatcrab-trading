@@ -69,9 +69,13 @@ pub(crate) struct FatCrabMaker {
 impl FatCrabMaker {
     const MAKE_TRADE_REQUEST_CHANNEL_SIZE: usize = 10;
 
-    pub(crate) async fn new(order: FatCrabOrder, n3xb_maker: MakerAccess) -> Self {
+    pub(crate) async fn new(
+        order: FatCrabOrder,
+        receive_address: impl Into<String>,
+        n3xb_maker: MakerAccess,
+    ) -> Self {
         let (tx, rx) = mpsc::channel::<FatCrabMakerRequest>(Self::MAKE_TRADE_REQUEST_CHANNEL_SIZE);
-        let mut actor = FatCrabMakerActor::new(rx, order, n3xb_maker).await;
+        let mut actor = FatCrabMakerActor::new(rx, order, receive_address, n3xb_maker).await;
         let task_handle = tokio::spawn(async move { actor.run().await });
         Self { tx, task_handle }
     }
@@ -102,6 +106,7 @@ struct FatCrabMakerActor {
     rx: mpsc::Receiver<FatCrabMakerRequest>,
     notif_tx: Option<mpsc::Sender<FatCrabMakerNotif>>,
     order: FatCrabOrder,
+    receive_address: String,
     n3xb_maker: MakerAccess,
 }
 
@@ -109,6 +114,7 @@ impl FatCrabMakerActor {
     async fn new(
         rx: mpsc::Receiver<FatCrabMakerRequest>,
         order: FatCrabOrder,
+        receive_address: impl Into<String>,
         n3xb_maker: MakerAccess,
     ) -> Self {
         n3xb_maker.post_new_order().await.unwrap();
@@ -117,6 +123,7 @@ impl FatCrabMakerActor {
             rx,
             notif_tx: None,
             order,
+            receive_address: receive_address.into(),
             n3xb_maker,
         }
     }
@@ -211,12 +218,13 @@ impl FatCrabMakerActor {
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
     ) {
         match trade_rsp {
-            FatCrabTradeRsp::Accept => {
+            FatCrabTradeRsp::Accept(receive_address) => {
                 let mut trade_rsp_builder = TradeResponseBuilder::new();
                 trade_rsp_builder.offer_event_id(offer_envelope.envelope.event_id);
                 trade_rsp_builder.trade_response(TradeResponseStatus::Accepted);
 
-                let trade_engine_specifics = FatCrabMakeTradeRspSpecifics {};
+                assert_eq!(self.receive_address, receive_address);
+                let trade_engine_specifics = FatCrabMakeTradeRspSpecifics { receive_address };
                 trade_rsp_builder.trade_engine_specifics(Box::new(trade_engine_specifics));
 
                 let n3xb_trade_rsp = trade_rsp_builder.build().unwrap();
