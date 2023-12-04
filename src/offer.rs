@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct FatCrabTakeOrderSpecifics {
+pub struct FatCrabTakeOrderSpecifics {
     receive_address: String,
 }
 
@@ -28,7 +28,7 @@ impl SerdeGenericTrait for FatCrabTakeOrderSpecifics {
 
 #[derive(Debug, Clone)]
 pub struct FatCrabOfferEnvelope {
-    pub offer: Offer,
+    pub offer: FatCrabOffer,
     pub(crate) envelope: OfferEnvelope,
 }
 
