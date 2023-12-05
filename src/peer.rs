@@ -10,8 +10,8 @@ pub struct FatCrabPeerEnvelope {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FatCrabPeerMessage {
-    receive_address: Option<String>,
-    txid: Option<String>,
+    pub receive_address: String,
+    pub txid: String,
 }
 
 #[typetag::serde(name = "fatcrab_peer_message_specifics")]

@@ -23,6 +23,18 @@ pub struct FatCrabTakerAccess {
 }
 
 impl FatCrabTakerAccess {
+    pub async fn notify_peer(&self, txid: impl Into<String>) -> Result<(), FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
+        self.tx
+            .send(FatCrabTakerRequest::NotifyPeer {
+                txid: txid.into(),
+                rsp_tx,
+            })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
     pub async fn register_notif_tx(
         &self,
         tx: mpsc::Sender<FatCrabTakerNotif>,
@@ -72,6 +84,10 @@ impl FatCrabTaker {
 }
 
 enum FatCrabTakerRequest {
+    NotifyPeer {
+        txid: String,
+        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
+    },
     RegisterNotifTx {
         tx: mpsc::Sender<FatCrabTakerNotif>,
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
@@ -122,6 +138,9 @@ impl FatCrabTakerActor {
             select! {
                 Some(request) = self.rx.recv() => {
                     match request {
+                        FatCrabTakerRequest::NotifyPeer { txid, rsp_tx } => {
+                            self.notify_peer(txid, rsp_tx).await;
+                        }
                         FatCrabTakerRequest::RegisterNotifTx { tx, rsp_tx } => {
                             self.register_notif_tx(tx, rsp_tx).await;
                         }
@@ -173,6 +192,26 @@ impl FatCrabTakerActor {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    async fn notify_peer(
+        &mut self,
+        txid: String,
+        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
+    ) {
+        let message = FatCrabPeerMessage {
+            receive_address: self.receive_address.clone(),
+            txid,
+        };
+
+        match self.n3xb_taker.send_peer_message(Box::new(message)).await {
+            Ok(_) => {
+                rsp_tx.send(Ok(())).unwrap();
+            }
+            Err(error) => {
+                rsp_tx.send(Err(error.into())).unwrap();
             }
         }
     }

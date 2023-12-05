@@ -98,7 +98,6 @@ mod test {
 
         // Maker - Wait for Fatcrab Trader Order to be taken
         let maker_notif = maker_notif_rx.recv().await.unwrap();
-
         let offer_envelope = match maker_notif {
             FatCrabMakerNotif::Offer(offer_envelope) => offer_envelope,
             _ => {
@@ -115,7 +114,6 @@ mod test {
 
         // Taker - Wait for Fatcrab Trade Response
         let taker_notif = taker_notif_rx.recv().await.unwrap();
-
         let maker_remitted_fatcrab_acct_id_string = match taker_notif {
             FatCrabTakerNotif::TradeRsp(trade_rsp_envelope) => match trade_rsp_envelope.trade_rsp {
                 FatCrabTradeRsp::Accept(receive_address) => receive_address,
@@ -132,11 +130,32 @@ mod test {
             maker_receive_fatcrab_acct_id
         );
 
-        // Taker - User to remit Fatcrab
+        // Taker - User remitting Fatcrab
 
         // Taker - User claims Fatcrab remittance, send Peer Message with Bitcoin address
+        let taker_fatcrab_remittance_txid = Uuid::new_v4().to_string();
+        taker
+            .notify_peer(&taker_fatcrab_remittance_txid)
+            .await
+            .unwrap();
 
         // Maker - Wait for Fatcrab Peer Message
+        let maker_notif = maker_notif_rx.recv().await.unwrap();
+        match maker_notif {
+            FatCrabMakerNotif::Peer(peer_msg_envelope) => {
+                assert_eq!(
+                    &peer_msg_envelope.message.txid,
+                    &taker_fatcrab_remittance_txid
+                );
+                assert_eq!(
+                    &peer_msg_envelope.message.receive_address,
+                    &taker_receive_bitcoin_addr.to_string()
+                );
+            }
+            _ => {
+                panic!("Maker only expects Peer Message at this point");
+            }
+        }
 
         // Maker - (Auto) Send Bitcoin to Taker Bitcoin address
 

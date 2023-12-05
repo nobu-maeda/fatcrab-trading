@@ -39,6 +39,18 @@ impl FatCrabMakerAccess {
         rsp_rx.await.unwrap()
     }
 
+    pub async fn notify_peer(&self, txid: impl Into<String>) -> Result<(), FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
+        self.tx
+            .send(FatCrabMakerRequest::NotifyPeer {
+                txid: txid.into(),
+                rsp_tx,
+            })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
     pub async fn register_notif_tx(
         &self,
         tx: mpsc::Sender<FatCrabMakerNotif>,
@@ -91,6 +103,10 @@ enum FatCrabMakerRequest {
     TradeResponse {
         trade_rsp: FatCrabTradeRsp,
         offer_envelope: FatCrabOfferEnvelope,
+        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
+    },
+    NotifyPeer {
+        txid: String,
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
     },
     RegisterNotifTx {
@@ -148,6 +164,9 @@ impl FatCrabMakerActor {
                     match request {
                         FatCrabMakerRequest::TradeResponse { trade_rsp, offer_envelope, rsp_tx } => {
                             self.trade_response(trade_rsp, offer_envelope, rsp_tx).await;
+                        },
+                        FatCrabMakerRequest::NotifyPeer { txid, rsp_tx } => {
+                            self.notify_peer(txid, rsp_tx).await;
                         },
                         FatCrabMakerRequest::RegisterNotifTx { tx, rsp_tx } => {
                             self.register_notif_tx(tx, rsp_tx).await;
@@ -235,6 +254,21 @@ impl FatCrabMakerActor {
             }
         }
         rsp_tx.send(Ok(())).unwrap();
+    }
+
+    async fn notify_peer(&self, txid: String, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+        let message = FatCrabPeerMessage {
+            receive_address: self.receive_address.clone(),
+            txid,
+        };
+        match self.n3xb_maker.send_peer_message(Box::new(message)).await {
+            Ok(_) => {
+                rsp_tx.send(Ok(())).unwrap();
+            }
+            Err(error) => {
+                rsp_tx.send(Err(error.into())).unwrap();
+            }
+        }
     }
 
     async fn register_notif_tx(
