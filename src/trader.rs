@@ -4,12 +4,18 @@ use std::{
     sync::RwLock,
 };
 
+use bdk::{
+    bitcoin::{bip32::ExtendedPrivKey, Network},
+    database::MemoryDatabase,
+    template::Bip84,
+    KeychainKind, Wallet,
+};
 use crusty_n3xb::{
     common::types::{BitcoinSettlementMethod, ObligationKind},
     manager::Manager,
     order::FilterTag,
 };
-use secp256k1::{SecretKey, XOnlyPublicKey};
+use secp256k1::{rand, SecretKey, XOnlyPublicKey};
 use uuid::Uuid;
 
 use crate::{
@@ -22,7 +28,9 @@ use crate::{
 };
 
 pub struct FatCrabTrader {
+    secret_key: SecretKey,
     n3xb_manager: Manager,
+    wallet: Wallet<MemoryDatabase>,
     makers: RwLock<HashMap<Uuid, FatCrabMaker>>,
     takers: RwLock<HashMap<Uuid, FatCrabTaker>>,
     maker_accessors: RwLock<HashMap<Uuid, FatCrabMakerAccess>>,
@@ -30,22 +38,33 @@ pub struct FatCrabTrader {
 }
 
 impl FatCrabTrader {
-    pub async fn new() -> Self {
-        let trade_engine_name = "fat-crab-trade-engine";
-        Self {
-            n3xb_manager: Manager::new(trade_engine_name).await,
-            makers: RwLock::new(HashMap::new()),
-            takers: RwLock::new(HashMap::new()),
-            maker_accessors: RwLock::new(HashMap::new()),
-            taker_accessors: RwLock::new(HashMap::new()),
-        }
+    fn create_wallet(key: SecretKey, network: Network) -> Wallet<MemoryDatabase> {
+        let secret_bytes = key.secret_bytes();
+        let xprv = ExtendedPrivKey::new_master(network, &secret_bytes).unwrap();
+
+        Wallet::new(
+            Bip84(xprv, KeychainKind::External),
+            Some(Bip84(xprv, KeychainKind::Internal)),
+            network,
+            MemoryDatabase::default(),
+        )
+        .unwrap()
     }
 
-    pub async fn new_with_keys(key: SecretKey) -> Self {
+    pub async fn new() -> Self {
+        let secret_key = SecretKey::new(&mut rand::thread_rng());
+        Self::new_with_keys(secret_key).await
+    }
+
+    pub async fn new_with_keys(secret_key: SecretKey) -> Self {
         let trade_engine_name = "fat-crab-trade-engine";
-        let n3xb_manager = Manager::new_with_keys(key, trade_engine_name).await;
+        let n3xb_manager = Manager::new_with_keys(secret_key, trade_engine_name).await;
+        let wallet = Self::create_wallet(secret_key, Network::Regtest);
+
         Self {
+            secret_key,
             n3xb_manager,
+            wallet,
             makers: RwLock::new(HashMap::new()),
             takers: RwLock::new(HashMap::new()),
             maker_accessors: RwLock::new(HashMap::new()),
