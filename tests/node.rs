@@ -1,0 +1,55 @@
+use bdk::{bitcoin, bitcoincore_rpc::RpcApi, blockchain::rpc::Auth};
+use bitcoin::Address;
+use electrsd::bitcoind::BitcoinD;
+
+pub struct Node {
+    bitcoind: BitcoinD,
+    bitcoind_auth: Auth,
+    core_address: Address,
+}
+
+impl Node {
+    pub fn new() -> Self {
+        // -- Setting up background bitcoind process
+
+        println!(">> Setting up bitcoind");
+
+        // Start the bitcoind process
+        let bitcoind_conf = electrsd::bitcoind::Conf::default();
+
+        // electrsd will automatically download the bitcoin core binaries
+        let bitcoind_exe = electrsd::bitcoind::downloaded_exe_path()
+            .expect("We should always have downloaded path");
+
+        // Launch bitcoind and gather authentication access
+        let bitcoind = BitcoinD::with_conf(bitcoind_exe, &bitcoind_conf).unwrap();
+        let bitcoind_auth = Auth::Cookie {
+            file: bitcoind.params.cookie_file.clone(),
+        };
+
+        // Get a new core address
+        let core_address = bitcoind
+            .client
+            .get_new_address(None, None)
+            .unwrap()
+            .assume_checked();
+
+        // Generate 101 blocks and use the above address as coinbase
+        bitcoind
+            .client
+            .generate_to_address(101, &core_address)
+            .unwrap();
+
+        println!(">> bitcoind setup complete");
+        println!(
+            "Available coins in Core wallet : {}",
+            bitcoind.client.get_balance(None, None).unwrap()
+        );
+
+        Self {
+            bitcoind,
+            bitcoind_auth,
+            core_address,
+        }
+    }
+}

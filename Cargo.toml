@@ -16,5 +16,15 @@ serde = { version = "1.0", features = ["derive", "rc"] }
 
 [dev-dependencies]
 anyhow = "1.0"
+base64 = { version = "0.21.0" }
+bdk = { version = "0.29.0", default-features = true, features = [
+    "all-keys",
+    "key-value-db",
+    "rpc",
+] }
+electrsd = { version = "*", default-features = false, features = [
+    "bitcoind_22_0",
+] }
 hyper = "0.14"
+miniscript = { version = "9.0", features = ["serde", "compiler"] }
 nostr-rs-relay = "0.8"

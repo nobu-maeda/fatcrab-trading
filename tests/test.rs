@@ -1,3 +1,4 @@
+mod node;
 mod relay;
 
 #[cfg(test)]
@@ -14,12 +15,12 @@ mod test {
         trader::FatCrabTrader,
     };
 
-    use crate::relay::Relay;
+    use crate::{node::Node, relay::Relay};
 
     #[tokio::test]
     async fn test() {
-        // TODO: Initialize Regtest Bitcoin Blockchain
-        // TODO: Mine a block
+        // Initialize Regtest Bitcoin blockchain & mine 101 blocks
+        let node = Node::new();
 
         // Initialize Relays
         let mut relays: Vec<Relay> = Vec::new();
