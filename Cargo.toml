@@ -11,6 +11,7 @@ bdk = { version = "0.29.0", default-features = true, features = [
     "key-value-db",
     "rpc",
 ] }
+bitcoin = "0.30"
 crusty-n3xb = { path = "../crusty-n3xb" }
 log = "0.4"
 secp256k1 = "0.27"

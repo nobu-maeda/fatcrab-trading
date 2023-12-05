@@ -6,12 +6,14 @@ use std::{
 
 use bdk::{
     bitcoin::{bip32::ExtendedPrivKey, Network},
-    blockchain::{rpc::Auth, ConfigurableBlockchain, RpcBlockchain, RpcConfig},
+    blockchain::{rpc::Auth, Blockchain, ConfigurableBlockchain, RpcBlockchain, RpcConfig},
     database::MemoryDatabase,
     keys::bip39::Mnemonic,
     template::Bip84,
-    KeychainKind, SyncOptions, Wallet,
+    wallet::AddressIndex,
+    KeychainKind, SignOptions, SyncOptions, Wallet,
 };
+use bitcoin::{Address, Txid};
 use crusty_n3xb::{
     common::types::{BitcoinSettlementMethod, ObligationKind},
     manager::Manager,
@@ -97,15 +99,39 @@ impl FatCrabTrader {
         }
     }
 
-    pub fn bip39_mnemonic(&self) -> Mnemonic {
-        let mnemonic = Mnemonic::from_entropy(&self.secret_key.secret_bytes()).unwrap();
-        mnemonic
+    pub fn wallet_bip39_mnemonic(&self) -> Result<Mnemonic, FatCrabError> {
+        Ok(Mnemonic::from_entropy(&self.secret_key.secret_bytes())?)
     }
 
-    pub fn sync_wallet(&self) {
-        self.wallet
-            .sync(&self.blockchain, SyncOptions::default())
-            .unwrap();
+    pub fn wallet_spendable_balance(&self) -> Result<u64, FatCrabError> {
+        Ok(self.wallet.get_balance()?.confirmed)
+    }
+
+    pub fn wallet_generate_receive_address(&self) -> Result<Address, FatCrabError> {
+        Ok(self.wallet.get_address(AddressIndex::New)?.to_owned())
+    }
+
+    pub fn wallet_send_to_address(
+        &self,
+        address: Address,
+        sats: u64,
+    ) -> Result<Txid, FatCrabError> {
+        let mut tx_builder = self.wallet.build_tx();
+        tx_builder.set_recipients(vec![(address.script_pubkey(), sats)]);
+        let (mut psbt, tx_details) = tx_builder.finish()?;
+        let signopt: SignOptions = SignOptions {
+            assume_height: None,
+            ..Default::default()
+        };
+        self.wallet.sign(&mut psbt, signopt)?;
+        let tx = psbt.extract_tx();
+        self.blockchain.broadcast(&tx)?;
+        Ok(tx_details.txid)
+    }
+
+    pub fn sync_wallet(&self) -> Result<(), FatCrabError> {
+        self.wallet.sync(&self.blockchain, SyncOptions::default())?;
+        Ok(())
     }
 
     pub async fn nostr_pubkey(&self) -> XOnlyPublicKey {

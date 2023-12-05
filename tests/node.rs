@@ -1,9 +1,5 @@
-use bdk::{
-    bitcoin::{self, Network},
-    bitcoincore_rpc::RpcApi,
-    blockchain::rpc::Auth,
-};
-use bitcoin::Address;
+use bdk::{bitcoin::Network, bitcoincore_rpc::RpcApi, blockchain::rpc::Auth};
+use bitcoin::{Address, Amount, Txid};
 use electrsd::bitcoind::BitcoinD;
 
 pub struct Node {
@@ -66,5 +62,32 @@ impl Node {
 
     pub fn network(&self) -> Network {
         Network::Regtest
+    }
+
+    pub fn generate_blocks(&self, block_num: u64) {
+        self.bitcoind
+            .client
+            .generate_to_address(block_num, &self.core_address)
+            .unwrap();
+    }
+
+    pub fn get_spendable_balance(&self) -> u64 {
+        self.bitcoind
+            .client
+            .get_balance(None, None)
+            .unwrap()
+            .to_sat()
+    }
+
+    pub fn get_receive_address(&self) -> Address {
+        self.core_address.clone()
+    }
+
+    pub fn send_to_address(&self, address: Address, sats: u64) -> Txid {
+        let amount = Amount::from_sat(sats);
+        self.bitcoind
+            .client
+            .send_to_address(&address, amount, None, None, None, None, None, None)
+            .unwrap()
     }
 }
