@@ -1,4 +1,8 @@
-use bdk::{bitcoin, bitcoincore_rpc::RpcApi, blockchain::rpc::Auth};
+use bdk::{
+    bitcoin::{self, Network},
+    bitcoincore_rpc::RpcApi,
+    blockchain::rpc::Auth,
+};
 use bitcoin::Address;
 use electrsd::bitcoind::BitcoinD;
 
@@ -11,10 +15,9 @@ pub struct Node {
 impl Node {
     pub fn new() -> Self {
         // -- Setting up background bitcoind process
-
         println!(">> Setting up bitcoind");
 
-        // Start the bitcoind process
+        // Start the bitcoind process - Conf::default is Regtest
         let bitcoind_conf = electrsd::bitcoind::Conf::default();
 
         // electrsd will automatically download the bitcoin core binaries
@@ -51,5 +54,17 @@ impl Node {
             bitcoind_auth,
             core_address,
         }
+    }
+
+    pub fn auth(&self) -> Auth {
+        self.bitcoind_auth.clone()
+    }
+
+    pub fn url(&self) -> String {
+        self.bitcoind.rpc_url()
+    }
+
+    pub fn network(&self) -> Network {
+        Network::Regtest
     }
 }

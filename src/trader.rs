@@ -6,9 +6,11 @@ use std::{
 
 use bdk::{
     bitcoin::{bip32::ExtendedPrivKey, Network},
+    blockchain::{rpc::Auth, ConfigurableBlockchain, RpcBlockchain, RpcConfig},
     database::MemoryDatabase,
+    keys::bip39::Mnemonic,
     template::Bip84,
-    KeychainKind, Wallet,
+    KeychainKind, SyncOptions, Wallet,
 };
 use crusty_n3xb::{
     common::types::{BitcoinSettlementMethod, ObligationKind},
@@ -31,6 +33,7 @@ pub struct FatCrabTrader {
     secret_key: SecretKey,
     n3xb_manager: Manager,
     wallet: Wallet<MemoryDatabase>,
+    blockchain: RpcBlockchain,
     makers: RwLock<HashMap<Uuid, FatCrabMaker>>,
     takers: RwLock<HashMap<Uuid, FatCrabTaker>>,
     maker_accessors: RwLock<HashMap<Uuid, FatCrabMakerAccess>>,
@@ -38,6 +41,21 @@ pub struct FatCrabTrader {
 }
 
 impl FatCrabTrader {
+    fn create_blockchain(url: String, auth: Auth, network: Network) -> RpcBlockchain {
+        // Create a RPC configuration of the running bitcoind backend we created in last step
+        // Note: If you are using custom regtest node, use the appropriate url and auth
+        let rpc_config = RpcConfig {
+            url,
+            auth,
+            network,
+            wallet_name: format!("Wallet-{}", Uuid::new_v4().to_string()),
+            sync_params: None,
+        };
+
+        // Use the above configuration to create a RPC blockchain backend
+        RpcBlockchain::from_config(&rpc_config).unwrap()
+    }
+
     fn create_wallet(key: SecretKey, network: Network) -> Wallet<MemoryDatabase> {
         let secret_bytes = key.secret_bytes();
         let xprv = ExtendedPrivKey::new_master(network, &secret_bytes).unwrap();
@@ -51,20 +69,27 @@ impl FatCrabTrader {
         .unwrap()
     }
 
-    pub async fn new() -> Self {
+    pub async fn new(url: String, auth: Auth, network: Network) -> Self {
         let secret_key = SecretKey::new(&mut rand::thread_rng());
-        Self::new_with_keys(secret_key).await
+        Self::new_with_keys(secret_key, url, auth, network).await
     }
 
-    pub async fn new_with_keys(secret_key: SecretKey) -> Self {
+    pub async fn new_with_keys(
+        secret_key: SecretKey,
+        url: String,
+        auth: Auth,
+        network: Network,
+    ) -> Self {
         let trade_engine_name = "fat-crab-trade-engine";
         let n3xb_manager = Manager::new_with_keys(secret_key, trade_engine_name).await;
         let wallet = Self::create_wallet(secret_key, Network::Regtest);
+        let blockchain = Self::create_blockchain(url, auth, network);
 
         Self {
             secret_key,
             n3xb_manager,
             wallet,
+            blockchain,
             makers: RwLock::new(HashMap::new()),
             takers: RwLock::new(HashMap::new()),
             maker_accessors: RwLock::new(HashMap::new()),
@@ -72,7 +97,18 @@ impl FatCrabTrader {
         }
     }
 
-    pub async fn pubkey(&self) -> XOnlyPublicKey {
+    pub fn bip39_mnemonic(&self) -> Mnemonic {
+        let mnemonic = Mnemonic::from_entropy(&self.secret_key.secret_bytes()).unwrap();
+        mnemonic
+    }
+
+    pub fn sync_wallet(&self) {
+        self.wallet
+            .sync(&self.blockchain, SyncOptions::default())
+            .unwrap();
+    }
+
+    pub async fn nostr_pubkey(&self) -> XOnlyPublicKey {
         self.n3xb_manager.pubkey().await
     }
 

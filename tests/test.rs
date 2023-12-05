@@ -42,14 +42,12 @@ mod test {
         relays.push(relay);
 
         // Maker - Create Fatcrab Trader for Maker
-        // TODO: Generate seed, create wallet, and return seed to user
-        let trader_m = FatCrabTrader::new().await;
+        let trader_m = FatCrabTrader::new(node.url(), node.auth(), node.network()).await;
 
         // TODO: Maker - Fund Maker Fatcrab Trader internal wallet from miner
 
         // Taker - Create Fatcrab Trader for Taker
-        // TODO: Generate see, create wallet, and return seed to user
-        let trader_t = FatCrabTrader::new().await;
+        let trader_t = FatCrabTrader::new(node.url(), node.auth(), node.network()).await;
 
         // Add Relays
         let mut relay_addrs: Vec<(String, Option<SocketAddr>)> = Vec::new();
