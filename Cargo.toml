@@ -24,7 +24,7 @@ uuid = { version = "1.4", features = ["serde", "v4"] }
 anyhow = "1.0"
 base64 = { version = "0.21.0" }
 electrsd = { version = "*", default-features = false, features = [
-    "bitcoind_22_0",
+    "bitcoind_23_0",
 ] }
 hyper = "0.14"
 miniscript = { version = "9.0", features = ["serde", "compiler"] }

@@ -129,7 +129,7 @@ impl FatCrabTrader {
         Ok(tx_details.txid)
     }
 
-    pub fn sync_wallet(&self) -> Result<(), FatCrabError> {
+    pub fn wallet_blockchain_sync(&self) -> Result<(), FatCrabError> {
         self.wallet.sync(&self.blockchain, SyncOptions::default())?;
         Ok(())
     }
