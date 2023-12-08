@@ -99,6 +99,7 @@ impl FatCrabTrader {
         Ok(())
     }
 
+    // TODO: Split Make Order into Make Buy Order & Make Sell Order. We need Four State Machines to make this less confusing
     pub async fn make_order(
         &self,
         order: FatCrabOrder,
@@ -109,9 +110,10 @@ impl FatCrabTrader {
             .new_maker(order.clone().into())
             .await
             .unwrap();
+        let purse_accessor = self.purse.new_accessor();
 
         let trade_uuid = order.trade_uuid.clone();
-        let maker = FatCrabMaker::new(order, receive_address, n3xb_maker).await;
+        let maker = FatCrabMaker::new(order, receive_address, n3xb_maker, purse_accessor).await;
         let maker_accessor = maker.new_accessor();
         let maker_return_accessor = maker.new_accessor();
 
@@ -173,6 +175,7 @@ impl FatCrabTrader {
         Ok(orders)
     }
 
+    // TODO: Split Take Order into Take Buy Order & Take Sell Order. We need Four State Machines to make this less confusing
     pub async fn take_order(
         &self,
         order: FatCrabOrderEnvelope,

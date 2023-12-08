@@ -1,5 +1,7 @@
-use crusty_n3xb::machine::taker::TakerAccess;
 use log::{error, warn};
+
+use bitcoin::{address::Address, address::NetworkChecked, address::NetworkUnchecked};
+use crusty_n3xb::machine::taker::TakerAccess;
 use tokio::{
     select,
     sync::{mpsc, oneshot},
@@ -7,9 +9,10 @@ use tokio::{
 
 use crate::{
     error::FatCrabError,
-    order::FatCrabOrderEnvelope,
+    order::{FatCrabOrderEnvelope, FatCrabOrderType},
     peer::{FatCrabPeerEnvelope, FatCrabPeerMessage},
-    trade_rsp::{FatCrabTradeRsp, FatCrabTradeRspEnvelope},
+    purse::PurseAccess,
+    trade_rsp::{FatCrabMakeTradeRspSpecifics, FatCrabTradeRsp, FatCrabTradeRspEnvelope},
 };
 
 pub enum FatCrabTakerNotif {
@@ -67,11 +70,13 @@ impl FatCrabTaker {
 
     pub(crate) async fn new(
         order: FatCrabOrderEnvelope,
-        receive_address: impl Into<String>,
+        fatcrab_rx_address: Option<String>,
         n3xb_taker: TakerAccess,
+        purse: PurseAccess,
     ) -> Self {
         let (tx, rx) = mpsc::channel::<FatCrabTakerRequest>(Self::TAKE_TRADE_REQUEST_CHANNEL_SIZE);
-        let mut actor = FatCrabTakerActor::new(rx, order, receive_address, n3xb_taker).await;
+        let mut actor =
+            FatCrabTakerActor::new(rx, order, fatcrab_rx_address, n3xb_taker, purse).await;
         let task_handle = tokio::spawn(async move { actor.run().await });
         Self { tx, task_handle }
     }
@@ -102,22 +107,49 @@ struct FatCrabTakerActor {
     notif_tx: Option<mpsc::Sender<FatCrabTakerNotif>>,
     order: FatCrabOrderEnvelope,
     receive_address: String,
+    allocation: u64,
     n3xb_taker: TakerAccess,
+    purse: PurseAccess,
 }
 
 impl FatCrabTakerActor {
     async fn new(
         rx: mpsc::Receiver<FatCrabTakerRequest>,
         order: FatCrabOrderEnvelope,
-        receive_address: impl Into<String>,
+        fatcrab_rx_address: Option<String>,
         n3xb_taker: TakerAccess,
+        purse: PurseAccess,
     ) -> Self {
+        let mut allocation = 0;
+
+        // For Buy Order, Taker receive_address is Bitcoin address
+        // For Buy Order, Maker receive_address is Fatcrab ID
+        let receive_address = match order.order.order_type {
+            FatCrabOrderType::Buy => purse
+                .get_rx_address()
+                .await
+                .expect("Cannot create receive address from Wallet")
+                .to_string(),
+
+            FatCrabOrderType::Sell => {
+                let receive_address =
+                    fatcrab_rx_address.expect("Fatcrab ID is required to Take a Buy Order");
+                if let Some(error) = purse.allocate_funds(order.order.amount as u64).await.err() {
+                    error!("Cannot allocate funds from Wallet - {}", error.to_string());
+                }
+                allocation = order.order.amount as u64;
+                receive_address
+            }
+        };
+
         Self {
             rx,
             notif_tx: None,
             order,
-            receive_address: receive_address.into(),
+            receive_address,
+            allocation,
             n3xb_taker,
+            purse,
         }
     }
 
@@ -155,13 +187,38 @@ impl FatCrabTakerActor {
 
                     match trade_rsp_result {
                         Ok(n3xb_trade_rsp_envelope) => {
-                            if let Some(notif_tx) = &self.notif_tx {
-                                // TODO: n3xB checked against Offer. If accepted & Sell Order, auto send BTC & Peer Message
+                            let trade_rsp = FatCrabTradeRsp::from_n3xb_trade_rsp(n3xb_trade_rsp_envelope.trade_rsp.clone());
 
-                                // Rejected, or Buy Orer, notify User to handle
+                            match trade_rsp.clone() {
+                                FatCrabTradeRsp::Accept(receive_address) => {
+                                    if FatCrabOrderType::Sell == self.order.order.order_type {
+                                        // For Maker Sell, Taker Buy Order
+                                        // There's nothing preventing auto remit pre-allocated funds to Maker
+                                        // Delay notifying User. User will be notified when Maker remits Fatcrab peer notificaiton
+                                        let btc_unchecked_address: Address<NetworkUnchecked> = (&receive_address).parse().unwrap();
+                                        let btc_receive_address = btc_unchecked_address.require_network(self.purse.network).unwrap();
+
+                                        let txid = self.purse.send_to_address(
+                                            btc_receive_address,
+                                            self.order.order.amount as u64
+                                        ).await.unwrap();
+
+                                        let message = FatCrabPeerMessage {
+                                            receive_address: self.receive_address.clone(),
+                                            txid: txid.to_string(),
+                                        };
+                                        self.n3xb_taker.send_peer_message(Box::new(message)).await;
+                                        continue;
+                                    }
+                                },
+                                FatCrabTradeRsp::Reject => {},
+                            }
+
+                            if let Some(notif_tx) = &self.notif_tx {
+                                // Notify User to remite Fatcrab to Maker
                                 let fatcrab_trade_rsp_envelope = FatCrabTradeRspEnvelope {
                                     envelope: n3xb_trade_rsp_envelope.clone(),
-                                    trade_rsp: FatCrabTradeRsp::from_n3xb_trade_rsp(n3xb_trade_rsp_envelope.trade_rsp)
+                                    trade_rsp
                                 };
                                 notif_tx.send(FatCrabTakerNotif::TradeRsp(fatcrab_trade_rsp_envelope)).await.unwrap();
                             } else {

@@ -24,6 +24,11 @@ pub struct FatCrabTradeRspEnvelope {
     pub(crate) envelope: TradeResponseEnvelope,
 }
 
+pub enum FatCrabTradeRspType {
+    Accept,
+    Reject,
+}
+
 #[derive(Debug, Clone)]
 pub enum FatCrabTradeRsp {
     Accept(String),

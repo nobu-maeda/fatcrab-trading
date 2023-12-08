@@ -91,10 +91,7 @@ mod test {
         assert_eq!(orders.len(), 1);
 
         // Taker - Create Fatcrab Take Trader & Take Trade Order
-        let taker_receive_bitcoin_addr = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"; // TODO: Placeholder. Taker should generate with internal wallet
-        let taker = trader_t
-            .take_order(orders[0].clone(), taker_receive_bitcoin_addr)
-            .await;
+        let taker = trader_t.take_order(orders[0].clone(), None).await;
 
         let (taker_notif_tx, mut taker_notif_rx) =
             tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
