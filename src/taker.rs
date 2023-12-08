@@ -156,6 +156,9 @@ impl FatCrabTakerActor {
                     match trade_rsp_result {
                         Ok(n3xb_trade_rsp_envelope) => {
                             if let Some(notif_tx) = &self.notif_tx {
+                                // TODO: n3xB checked against Offer. If accepted & Sell Order, auto send BTC & Peer Message
+
+                                // Rejected, or Buy Orer, notify User to handle
                                 let fatcrab_trade_rsp_envelope = FatCrabTradeRspEnvelope {
                                     envelope: n3xb_trade_rsp_envelope.clone(),
                                     trade_rsp: FatCrabTradeRsp::from_n3xb_trade_rsp(n3xb_trade_rsp_envelope.trade_rsp)

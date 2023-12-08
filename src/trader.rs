@@ -4,16 +4,9 @@ use std::{
     sync::RwLock,
 };
 
-use bdk::{
-    bitcoin::{bip32::ExtendedPrivKey, Network},
-    blockchain::{rpc::Auth, Blockchain, ConfigurableBlockchain, RpcBlockchain, RpcConfig},
-    database::MemoryDatabase,
-    keys::bip39::Mnemonic,
-    template::Bip84,
-    wallet::AddressIndex,
-    KeychainKind, SignOptions, SyncOptions, Wallet,
-};
-use bitcoin::{Address, Txid};
+use bip39::Mnemonic;
+use bitcoin::{Address, Network, Txid};
+use core_rpc::Auth;
 use crusty_n3xb::{
     common::types::{BitcoinSettlementMethod, ObligationKind},
     manager::Manager,
@@ -28,14 +21,14 @@ use crate::{
     maker::{FatCrabMaker, FatCrabMakerAccess},
     offer::FatCrabOffer,
     order::{FatCrabOrder, FatCrabOrderEnvelope, FatCrabOrderType},
+    purse::{Purse, PurseAccess},
     taker::{FatCrabTaker, FatCrabTakerAccess},
 };
 
 pub struct FatCrabTrader {
-    secret_key: SecretKey,
     n3xb_manager: Manager,
-    wallet: Wallet<MemoryDatabase>,
-    blockchain: RpcBlockchain,
+    purse: Purse,
+    purse_accessor: PurseAccess,
     makers: RwLock<HashMap<Uuid, FatCrabMaker>>,
     takers: RwLock<HashMap<Uuid, FatCrabTaker>>,
     maker_accessors: RwLock<HashMap<Uuid, FatCrabMakerAccess>>,
@@ -43,55 +36,26 @@ pub struct FatCrabTrader {
 }
 
 impl FatCrabTrader {
-    fn create_blockchain(url: String, auth: Auth, network: Network) -> RpcBlockchain {
-        // Create a RPC configuration of the running bitcoind backend we created in last step
-        // Note: If you are using custom regtest node, use the appropriate url and auth
-        let rpc_config = RpcConfig {
-            url,
-            auth,
-            network,
-            wallet_name: format!("Wallet-{}", Uuid::new_v4().to_string()),
-            sync_params: None,
-        };
-
-        // Use the above configuration to create a RPC blockchain backend
-        RpcBlockchain::from_config(&rpc_config).unwrap()
-    }
-
-    fn create_wallet(key: SecretKey, network: Network) -> Wallet<MemoryDatabase> {
-        let secret_bytes = key.secret_bytes();
-        let xprv = ExtendedPrivKey::new_master(network, &secret_bytes).unwrap();
-
-        Wallet::new(
-            Bip84(xprv, KeychainKind::External),
-            Some(Bip84(xprv, KeychainKind::Internal)),
-            network,
-            MemoryDatabase::default(),
-        )
-        .unwrap()
-    }
-
-    pub async fn new(url: String, auth: Auth, network: Network) -> Self {
+    pub async fn new(url: impl Into<String>, auth: Auth, network: Network) -> Self {
         let secret_key = SecretKey::new(&mut rand::thread_rng());
         Self::new_with_keys(secret_key, url, auth, network).await
     }
 
     pub async fn new_with_keys(
         secret_key: SecretKey,
-        url: String,
+        url: impl Into<String>,
         auth: Auth,
         network: Network,
     ) -> Self {
         let trade_engine_name = "fat-crab-trade-engine";
         let n3xb_manager = Manager::new_with_keys(secret_key, trade_engine_name).await;
-        let wallet = Self::create_wallet(secret_key, Network::Regtest);
-        let blockchain = Self::create_blockchain(url, auth, network);
+        let purse = Purse::new(secret_key, url, auth, network);
+        let purse_accessor = purse.new_accessor();
 
         Self {
-            secret_key,
             n3xb_manager,
-            wallet,
-            blockchain,
+            purse,
+            purse_accessor,
             makers: RwLock::new(HashMap::new()),
             takers: RwLock::new(HashMap::new()),
             maker_accessors: RwLock::new(HashMap::new()),
@@ -99,39 +63,28 @@ impl FatCrabTrader {
         }
     }
 
-    pub fn wallet_bip39_mnemonic(&self) -> Result<Mnemonic, FatCrabError> {
-        Ok(Mnemonic::from_entropy(&self.secret_key.secret_bytes())?)
+    pub async fn wallet_bip39_mnemonic(&self) -> Result<Mnemonic, FatCrabError> {
+        self.purse_accessor.get_mnemonic().await
     }
 
-    pub fn wallet_spendable_balance(&self) -> Result<u64, FatCrabError> {
-        Ok(self.wallet.get_balance()?.confirmed)
+    pub async fn wallet_spendable_balance(&self) -> Result<u64, FatCrabError> {
+        self.purse_accessor.get_spendable_balance().await
     }
 
-    pub fn wallet_generate_receive_address(&self) -> Result<Address, FatCrabError> {
-        Ok(self.wallet.get_address(AddressIndex::New)?.to_owned())
+    pub async fn wallet_generate_receive_address(&self) -> Result<Address, FatCrabError> {
+        self.purse_accessor.get_rx_address().await
     }
 
-    pub fn wallet_send_to_address(
+    pub async fn wallet_send_to_address(
         &self,
         address: Address,
         sats: u64,
     ) -> Result<Txid, FatCrabError> {
-        let mut tx_builder = self.wallet.build_tx();
-        tx_builder.set_recipients(vec![(address.script_pubkey(), sats)]);
-        let (mut psbt, tx_details) = tx_builder.finish()?;
-        let signopt: SignOptions = SignOptions {
-            assume_height: None,
-            ..Default::default()
-        };
-        self.wallet.sign(&mut psbt, signopt)?;
-        let tx = psbt.extract_tx();
-        self.blockchain.broadcast(&tx)?;
-        Ok(tx_details.txid)
+        self.purse_accessor.send_to_address(address, sats).await
     }
 
-    pub fn wallet_blockchain_sync(&self) -> Result<(), FatCrabError> {
-        self.wallet.sync(&self.blockchain, SyncOptions::default())?;
-        Ok(())
+    pub async fn wallet_blockchain_sync(&self) -> Result<(), FatCrabError> {
+        self.purse_accessor.sync_blockchain().await
     }
 
     pub async fn nostr_pubkey(&self) -> XOnlyPublicKey {

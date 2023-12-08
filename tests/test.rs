@@ -45,11 +45,11 @@ mod test {
         let trader_m = FatCrabTrader::new(node.url(), node.auth(), node.network()).await;
 
         // TODO: Maker - Fund Maker Fatcrab Trader internal wallet from miner
-        let address_m1 = trader_m.wallet_generate_receive_address().unwrap();
+        let address_m1 = trader_m.wallet_generate_receive_address().await.unwrap();
         let _txid1 = node.send_to_address(address_m1, 1000000);
         node.generate_blocks(1);
-        trader_m.wallet_blockchain_sync().unwrap();
-        assert_eq!(trader_m.wallet_spendable_balance().unwrap(), 1000000);
+        trader_m.wallet_blockchain_sync().await.unwrap();
+        assert_eq!(trader_m.wallet_spendable_balance().await.unwrap(), 1000000);
 
         // Taker - Create Fatcrab Trader for Taker
         let trader_t = FatCrabTrader::new(node.url(), node.auth(), node.network()).await;

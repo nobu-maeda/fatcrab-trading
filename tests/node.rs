@@ -1,5 +1,5 @@
-use bdk::{bitcoin::Network, bitcoincore_rpc::RpcApi, blockchain::rpc::Auth};
-use bitcoin::{Address, Amount, Txid};
+use bitcoin::{Address, Amount, Network, Txid};
+use core_rpc::{Auth, RpcApi};
 use electrsd::bitcoind::BitcoinD;
 
 pub struct Node {
@@ -22,9 +22,7 @@ impl Node {
 
         // Launch bitcoind and gather authentication access
         let bitcoind = BitcoinD::with_conf(bitcoind_exe, &bitcoind_conf).unwrap();
-        let bitcoind_auth = Auth::Cookie {
-            file: bitcoind.params.cookie_file.clone(),
-        };
+        let bitcoind_auth = Auth::CookieFile(bitcoind.params.cookie_file.clone());
 
         // Get a new core address
         let core_address = bitcoind

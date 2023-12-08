@@ -216,6 +216,11 @@ impl FatCrabMakerActor {
                                     envelope: n3xb_peer_envelope,
                                     message: fatcrab_peer_message
                                 };
+
+                                // TODO: Check against Order. For Buy order, auto send BTC & Peer Message if enabled
+
+                                // Else notify User to handle
+
                                 notif_tx.send(FatCrabMakerNotif::Peer(fatcrab_peer_envelope)).await.unwrap();
                             } else {
                                 warn!("Maker w/ TradeUUID {} do not have notif_tx registered", self.order.trade_uuid);

@@ -7,3 +7,5 @@ pub mod peer;
 pub mod taker;
 pub mod trade_rsp;
 pub mod trader;
+
+mod purse;
