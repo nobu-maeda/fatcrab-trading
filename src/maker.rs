@@ -59,11 +59,11 @@ impl FatCrabMakerAccess<Sell> {
         rsp_rx.await.unwrap()
     }
 
-    pub async fn notify_peer(&self, fatcrab_txid: String) -> Result<(), FatCrabError> {
+    pub async fn notify_peer(&self, fatcrab_txid: impl Into<String>) -> Result<(), FatCrabError> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
         self.tx
             .send(FatCrabMakerRequest::ReleaseNotifyPeer {
-                fatcrab_txid: Some(fatcrab_txid),
+                fatcrab_txid: Some(fatcrab_txid.into()),
                 rsp_tx,
             })
             .await
