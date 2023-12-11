@@ -294,7 +294,11 @@ impl PurseActor {
         .unwrap();
     }
 
-    pub fn allocate_funds(&self, sats: u64, rsp_tx: oneshot::Sender<Result<Uuid, FatCrabError>>) {
+    pub fn allocate_funds(
+        &mut self,
+        sats: u64,
+        rsp_tx: oneshot::Sender<Result<Uuid, FatCrabError>>,
+    ) {
         if self.actual_spendable_balance() < sats {
             rsp_tx
                 .send(Err(FatCrabError::Simple {
@@ -309,7 +313,11 @@ impl PurseActor {
         rsp_tx.send(Ok(funds_id)).unwrap();
     }
 
-    pub fn free_funds(&self, funds_id: Uuid, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+    pub fn free_funds(
+        &mut self,
+        funds_id: Uuid,
+        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
+    ) {
         if self.allocated_funds.remove(&funds_id).is_some() {
             rsp_tx.send(Ok(())).unwrap();
         } else {
@@ -322,7 +330,7 @@ impl PurseActor {
     }
 
     pub fn send_funds(
-        &self,
+        &mut self,
         funds_id: Uuid,
         address: Address,
         rsp_tx: oneshot::Sender<Result<Txid, FatCrabError>>,

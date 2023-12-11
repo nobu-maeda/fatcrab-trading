@@ -27,16 +27,21 @@ pub enum FatCrabTakerNotif {
 }
 
 // Just for Typing the Taker purposes
-struct Buy {} //  Means Taker is taking a Buy Order to Sell
-struct Sell {} // Means Tkaer is taking a Sell Order to Buy
+pub struct TakerBuy {} //  Means Taker is taking a Buy Order to Sell
+pub struct TakerSell {} // Means Tkaer is taking a Sell Order to Buy
+
+pub enum FatCrabTakerAccessEnum {
+    Buy(FatCrabTakerAccess<TakerBuy>),
+    Sell(FatCrabTakerAccess<TakerSell>),
+}
 
 #[derive(Clone)]
-pub struct FatCrabTakerAccess<OrderType = Buy> {
+pub struct FatCrabTakerAccess<OrderType = TakerBuy> {
     tx: mpsc::Sender<FatCrabTakerRequest>,
     _order_type: PhantomData<OrderType>,
 }
 
-impl FatCrabTakerAccess<Buy> {
+impl FatCrabTakerAccess<TakerBuy> {
     // Means Taker is taking a Buy Order to Sell
     pub async fn notify_peer(&self, txid: impl Into<String>) -> Result<(), FatCrabError> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
@@ -60,7 +65,7 @@ impl FatCrabTakerAccess<Buy> {
     }
 }
 
-impl FatCrabTakerAccess<Sell> {}
+impl FatCrabTakerAccess<TakerSell> {}
 
 impl FatCrabTakerAccess {
     pub async fn register_notif_tx(
@@ -85,7 +90,12 @@ impl FatCrabTakerAccess {
     }
 }
 
-pub(crate) struct FatCrabTaker<OrderType = Buy> {
+pub(crate) enum FatCrabTakerEnum {
+    Buy(FatCrabTaker<TakerBuy>),
+    Sell(FatCrabTaker<TakerSell>),
+}
+
+pub(crate) struct FatCrabTaker<OrderType = TakerBuy> {
     tx: mpsc::Sender<FatCrabTakerRequest>,
     task_handle: tokio::task::JoinHandle<()>,
     _order_type: PhantomData<OrderType>,
@@ -95,7 +105,7 @@ impl FatCrabTaker {
     const TAKE_TRADE_REQUEST_CHANNEL_SIZE: usize = 10;
 }
 
-impl FatCrabTaker<Buy> {
+impl FatCrabTaker<TakerBuy> {
     // Means Taker is taking a Buy Order to Sell
     pub(crate) async fn new(
         order_envelope: FatCrabOrderEnvelope,
@@ -114,7 +124,7 @@ impl FatCrabTaker<Buy> {
         }
     }
 
-    pub(crate) fn new_accessor(&self) -> FatCrabTakerAccess<Buy> {
+    pub(crate) fn new_accessor(&self) -> FatCrabTakerAccess<TakerBuy> {
         FatCrabTakerAccess {
             tx: self.tx.clone(),
             _order_type: PhantomData,
@@ -122,20 +132,25 @@ impl FatCrabTaker<Buy> {
     }
 }
 
-impl FatCrabTaker<Sell> {
+impl FatCrabTaker<TakerSell> {
     // Means Taker is taking a Sell Order to Buy
     pub(crate) async fn new(
         order_envelope: FatCrabOrderEnvelope,
-        fatcrab_rx_addr: String,
+        fatcrab_rx_addr: impl Into<String>,
         n3xb_taker: TakerAccess,
         purse: PurseAccess,
     ) -> Self {
         assert_eq!(order_envelope.order.order_type, FatCrabOrderType::Sell);
         let (tx, rx) =
             mpsc::channel::<FatCrabTakerRequest>(FatCrabTaker::TAKE_TRADE_REQUEST_CHANNEL_SIZE);
-        let mut actor =
-            FatCrabTakerActor::new(rx, order_envelope, Some(fatcrab_rx_addr), n3xb_taker, purse)
-                .await;
+        let mut actor = FatCrabTakerActor::new(
+            rx,
+            order_envelope,
+            Some(fatcrab_rx_addr.into()),
+            n3xb_taker,
+            purse,
+        )
+        .await;
         let task_handle = tokio::spawn(async move { actor.run().await });
         Self {
             tx,
@@ -144,7 +159,7 @@ impl FatCrabTaker<Sell> {
         }
     }
 
-    pub(crate) fn new_accessor(&self) -> FatCrabTakerAccess<Sell> {
+    pub(crate) fn new_accessor(&self) -> FatCrabTakerAccess<TakerSell> {
         FatCrabTakerAccess {
             tx: self.tx.clone(),
             _order_type: PhantomData,

@@ -18,21 +18,35 @@ use uuid::Uuid;
 use crate::{
     common::FATCRAB_OBLIGATION_CUSTOM_KIND_STRING,
     error::FatCrabError,
-    maker::{FatCrabMaker, FatCrabMakerAccess},
+    maker::{
+        FatCrabMaker, FatCrabMakerAccess, FatCrabMakerAccessEnum, FatCrabMakerEnum, MakerBuy,
+        MakerSell,
+    },
     offer::FatCrabOffer,
     order::{FatCrabOrder, FatCrabOrderEnvelope, FatCrabOrderType},
     purse::{Purse, PurseAccess},
-    taker::{FatCrabTaker, FatCrabTakerAccess},
+    taker::{
+        FatCrabTaker, FatCrabTakerAccess, FatCrabTakerAccessEnum, FatCrabTakerEnum, TakerBuy,
+        TakerSell,
+    },
 };
 
 pub struct FatCrabTrader {
     n3xb_manager: Manager,
     purse: Purse,
     purse_accessor: PurseAccess,
-    makers: RwLock<HashMap<Uuid, FatCrabMaker>>,
-    takers: RwLock<HashMap<Uuid, FatCrabTaker>>,
-    maker_accessors: RwLock<HashMap<Uuid, FatCrabMakerAccess>>,
-    taker_accessors: RwLock<HashMap<Uuid, FatCrabTakerAccess>>,
+    makers: RwLock<HashMap<Uuid, FatCrabMakerEnum>>,
+    takers: RwLock<HashMap<Uuid, FatCrabTakerEnum>>,
+    maker_accessors: RwLock<HashMap<Uuid, FatCrabMakerAccessEnum>>,
+    taker_accessors: RwLock<HashMap<Uuid, FatCrabTakerAccessEnum>>,
+    // maker_buys: RwLock<HashMap<Uuid, FatCrabMaker<MakerBuy>>>,
+    // maker_sells: RwLock<HashMap<Uuid, FatCrabMaker<MakerSell>>>,
+    // taker_buys: RwLock<HashMap<Uuid, FatCrabTaker<TakerBuy>>>,
+    // taker_sells: RwLock<HashMap<Uuid, FatCrabTaker<TakerSell>>>,
+    // maker_buy_accessors: RwLock<HashMap<Uuid, FatCrabMakerAccess<MakerBuy>>>,
+    // maker_sell_accessors: RwLock<HashMap<Uuid, FatCrabMakerAccess<MakerSell>>>,
+    // taker_buy_accessors: RwLock<HashMap<Uuid, FatCrabTakerAccess<TakerBuy>>>,
+    // taker_sell_accessors: RwLock<HashMap<Uuid, FatCrabTakerAccess<TakerSell>>>,
 }
 
 impl FatCrabTrader {
@@ -80,7 +94,8 @@ impl FatCrabTrader {
         address: Address,
         sats: u64,
     ) -> Result<Txid, FatCrabError> {
-        self.purse_accessor.send_to_address(address, sats).await
+        let funds_id = self.purse_accessor.allocate_funds(sats).await?;
+        self.purse_accessor.send_funds(funds_id, address).await
     }
 
     pub async fn wallet_blockchain_sync(&self) -> Result<(), FatCrabError> {
@@ -99,33 +114,63 @@ impl FatCrabTrader {
         Ok(())
     }
 
-    // TODO: Split Make Order into Make Buy Order & Make Sell Order. We need Four State Machines to make this less confusing
-    pub async fn make_order(
+    pub async fn make_buy_order(
         &self,
         order: FatCrabOrder,
-        receive_address: impl Into<String>,
-    ) -> FatCrabMakerAccess {
+        fatcrab_rx_addr: impl Into<String>,
+    ) -> FatCrabMakerAccess<MakerBuy> {
+        assert_eq!(order.order_type, FatCrabOrderType::Buy);
+
         let n3xb_maker = self
             .n3xb_manager
             .new_maker(order.clone().into())
             .await
             .unwrap();
         let purse_accessor = self.purse.new_accessor();
-
         let trade_uuid = order.trade_uuid.clone();
-        let maker = FatCrabMaker::new(order, receive_address, n3xb_maker, purse_accessor).await;
+
+        let maker =
+            FatCrabMaker::<MakerBuy>::new(order, fatcrab_rx_addr, n3xb_maker, purse_accessor).await;
         let maker_accessor = maker.new_accessor();
         let maker_return_accessor = maker.new_accessor();
 
         self.makers
             .write()
             .unwrap()
-            .insert(trade_uuid.clone(), maker);
+            .insert(trade_uuid.clone(), FatCrabMakerEnum::Buy(maker));
 
         self.maker_accessors
             .write()
             .unwrap()
-            .insert(trade_uuid, maker_accessor);
+            .insert(trade_uuid, FatCrabMakerAccessEnum::Buy(maker_accessor));
+
+        maker_return_accessor
+    }
+
+    pub async fn make_sell_order(&self, order: FatCrabOrder) -> FatCrabMakerAccess<MakerSell> {
+        assert_eq!(order.order_type, FatCrabOrderType::Sell);
+
+        let n3xb_maker = self
+            .n3xb_manager
+            .new_maker(order.clone().into())
+            .await
+            .unwrap();
+        let purse_accessor = self.purse.new_accessor();
+        let trade_uuid = order.trade_uuid.clone();
+
+        let maker = FatCrabMaker::<MakerSell>::new(order, n3xb_maker, purse_accessor).await;
+        let maker_accessor = maker.new_accessor();
+        let maker_return_accessor = maker.new_accessor();
+
+        self.makers
+            .write()
+            .unwrap()
+            .insert(trade_uuid.clone(), FatCrabMakerEnum::Sell(maker));
+
+        self.maker_accessors
+            .write()
+            .unwrap()
+            .insert(trade_uuid, FatCrabMakerAccessEnum::Sell(maker_accessor));
 
         maker_return_accessor
     }
@@ -175,36 +220,80 @@ impl FatCrabTrader {
         Ok(orders)
     }
 
-    // TODO: Split Take Order into Take Buy Order & Take Sell Order. We need Four State Machines to make this less confusing
-    pub async fn take_order(
+    pub async fn take_buy_order(
         &self,
-        order: FatCrabOrderEnvelope,
-        receive_address: impl Into<String>,
-    ) -> FatCrabTakerAccess {
+        order_envelope: FatCrabOrderEnvelope,
+    ) -> FatCrabTakerAccess<TakerBuy> {
+        assert_eq!(order_envelope.order.order_type, FatCrabOrderType::Buy);
+
         let n3xb_taker = self
             .n3xb_manager
             .new_taker(
-                order.envelope.clone(),
-                FatCrabOffer::create_n3xb_offer(order.order.clone()),
+                order_envelope.envelope.clone(),
+                FatCrabOffer::create_n3xb_offer(order_envelope.order.clone()),
             )
             .await
             .unwrap();
         n3xb_taker.take_order().await.unwrap();
+        let trade_uuid = order_envelope.order.trade_uuid.clone();
 
-        let trade_uuid = order.order.trade_uuid.clone();
-        let taker = FatCrabTaker::new(order, receive_address, n3xb_taker).await;
+        let taker =
+            FatCrabTaker::<TakerBuy>::new(order_envelope, n3xb_taker, self.purse.new_accessor())
+                .await;
         let taker_accessor = taker.new_accessor();
         let taker_return_accessor = taker.new_accessor();
 
         self.takers
             .write()
             .unwrap()
-            .insert(trade_uuid.clone(), taker);
+            .insert(trade_uuid.clone(), FatCrabTakerEnum::Buy(taker));
 
         self.taker_accessors
             .write()
             .unwrap()
-            .insert(trade_uuid, taker_accessor);
+            .insert(trade_uuid, FatCrabTakerAccessEnum::Buy(taker_accessor));
+
+        taker_return_accessor
+    }
+
+    pub async fn take_sell_order(
+        &self,
+        order_envelope: FatCrabOrderEnvelope,
+        fatcrab_rx_addr: impl Into<String>,
+    ) -> FatCrabTakerAccess<TakerSell> {
+        assert_eq!(order_envelope.order.order_type, FatCrabOrderType::Sell);
+
+        let n3xb_taker = self
+            .n3xb_manager
+            .new_taker(
+                order_envelope.envelope.clone(),
+                FatCrabOffer::create_n3xb_offer(order_envelope.order.clone()),
+            )
+            .await
+            .unwrap();
+        n3xb_taker.take_order().await.unwrap();
+
+        let trade_uuid = order_envelope.order.trade_uuid.clone();
+
+        let taker = FatCrabTaker::<TakerSell>::new(
+            order_envelope,
+            fatcrab_rx_addr,
+            n3xb_taker,
+            self.purse.new_accessor(),
+        )
+        .await;
+        let taker_accessor = taker.new_accessor();
+        let taker_return_accessor = taker.new_accessor();
+
+        self.takers
+            .write()
+            .unwrap()
+            .insert(trade_uuid.clone(), FatCrabTakerEnum::Sell(taker));
+
+        self.taker_accessors
+            .write()
+            .unwrap()
+            .insert(trade_uuid, FatCrabTakerAccessEnum::Sell(taker_accessor));
 
         taker_return_accessor
     }

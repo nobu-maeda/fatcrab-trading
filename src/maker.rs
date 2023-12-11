@@ -26,16 +26,21 @@ pub enum FatCrabMakerNotif {
 }
 
 // Just for Typing the Maker purposes
-struct Buy {}
-struct Sell {}
+pub struct MakerBuy {}
+pub struct MakerSell {}
+
+pub enum FatCrabMakerAccessEnum {
+    Buy(FatCrabMakerAccess<MakerBuy>),
+    Sell(FatCrabMakerAccess<MakerSell>),
+}
 
 #[derive(Clone)]
-pub struct FatCrabMakerAccess<OrderType = Buy> {
+pub struct FatCrabMakerAccess<OrderType = MakerBuy> {
     tx: mpsc::Sender<FatCrabMakerRequest>,
     _order_type: PhantomData<OrderType>,
 }
 
-impl FatCrabMakerAccess<Buy> {
+impl FatCrabMakerAccess<MakerBuy> {
     pub async fn release_notify_peer(&self) -> Result<(), FatCrabError> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
         self.tx
@@ -49,7 +54,7 @@ impl FatCrabMakerAccess<Buy> {
     }
 }
 
-impl FatCrabMakerAccess<Sell> {
+impl FatCrabMakerAccess<MakerSell> {
     pub async fn check_btc_tx_confirmation(&self) -> Result<u32, FatCrabError> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<u32, FatCrabError>>();
         self.tx
@@ -112,7 +117,12 @@ impl FatCrabMakerAccess {
     }
 }
 
-pub(crate) struct FatCrabMaker<OrderType = Buy> {
+pub(crate) enum FatCrabMakerEnum {
+    Buy(FatCrabMaker<MakerBuy>),
+    Sell(FatCrabMaker<MakerSell>),
+}
+
+pub(crate) struct FatCrabMaker<OrderType = MakerBuy> {
     tx: mpsc::Sender<FatCrabMakerRequest>,
     task_handle: tokio::task::JoinHandle<()>,
     _order_type: PhantomData<OrderType>,
@@ -122,17 +132,18 @@ impl FatCrabMaker {
     const MAKE_TRADE_REQUEST_CHANNEL_SIZE: usize = 10;
 }
 
-impl FatCrabMaker<Buy> {
+impl FatCrabMaker<MakerBuy> {
     pub(crate) async fn new(
         order: FatCrabOrder,
-        fatcrab_rx_addr: String,
+        fatcrab_rx_addr: impl Into<String>,
         n3xb_maker: MakerAccess,
         purse: PurseAccess,
     ) -> Self {
         let (tx, rx) =
             mpsc::channel::<FatCrabMakerRequest>(FatCrabMaker::MAKE_TRADE_REQUEST_CHANNEL_SIZE);
         let mut actor =
-            FatCrabMakerActor::new(rx, order, Some(fatcrab_rx_addr), n3xb_maker, purse).await;
+            FatCrabMakerActor::new(rx, order, Some(fatcrab_rx_addr.into()), n3xb_maker, purse)
+                .await;
         let task_handle = tokio::spawn(async move { actor.run().await });
         Self {
             tx,
@@ -141,7 +152,7 @@ impl FatCrabMaker<Buy> {
         }
     }
 
-    pub(crate) fn new_accessor(&self) -> FatCrabMakerAccess<Buy> {
+    pub(crate) fn new_accessor(&self) -> FatCrabMakerAccess<MakerBuy> {
         FatCrabMakerAccess {
             tx: self.tx.clone(),
             _order_type: PhantomData,
@@ -149,7 +160,7 @@ impl FatCrabMaker<Buy> {
     }
 }
 
-impl FatCrabMaker<Sell> {
+impl FatCrabMaker<MakerSell> {
     pub(crate) async fn new(
         order: FatCrabOrder,
         n3xb_maker: MakerAccess,
@@ -166,7 +177,7 @@ impl FatCrabMaker<Sell> {
         }
     }
 
-    pub(crate) fn new_accessor(&self) -> FatCrabMakerAccess<Sell> {
+    pub(crate) fn new_accessor(&self) -> FatCrabMakerAccess<MakerSell> {
         FatCrabMakerAccess {
             tx: self.tx.clone(),
             _order_type: PhantomData,
