@@ -3,6 +3,8 @@ use std::fmt::{Display, Formatter, Result};
 
 #[derive(Debug)]
 pub enum FatCrabError {
+    TxNotFound,
+    TxUnconfirmed,
     Simple {
         description: String,
     },
@@ -22,6 +24,8 @@ impl Error for FatCrabError {}
 impl Display for FatCrabError {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let error_string: String = match self {
+            FatCrabError::TxNotFound => "FatCrab-Error | TxNotFound".to_string(),
+            FatCrabError::TxUnconfirmed => "FatCrab-Error | TxUnconfirmed".to_string(),
             FatCrabError::Simple { description } => {
                 format!("FatCrab-Error | Simple - {}", description)
             }

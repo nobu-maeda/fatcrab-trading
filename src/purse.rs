@@ -1,19 +1,19 @@
-use log::debug;
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use bdk::{
     bitcoin::{bip32::ExtendedPrivKey, Network},
     blockchain::{
-        rpc::Auth as BdkAuth, Blockchain, ConfigurableBlockchain, RpcBlockchain, RpcConfig,
+        rpc::Auth as BdkAuth, Blockchain, ConfigurableBlockchain, GetHeight, RpcBlockchain,
+        RpcConfig,
     },
     database::MemoryDatabase,
     keys::bip39::Mnemonic,
     template::Bip84,
     wallet::AddressIndex,
-    KeychainKind, SignOptions, SyncOptions, Wallet,
+    KeychainKind, SignOptions, SyncOptions, TransactionDetails, Wallet,
 };
 
-use bitcoin::{Address, Txid};
+use bitcoin::{psbt::PartiallySignedTransaction, Address, Txid};
 use core_rpc::Auth;
 use secp256k1::SecretKey;
 use tokio::sync::{mpsc, oneshot};
@@ -36,33 +36,6 @@ impl PurseAccess {
         rsp_rx.await.unwrap()
     }
 
-    pub(crate) async fn get_spendable_balance(&self) -> Result<u64, FatCrabError> {
-        let (rsp_tx, rsp_rx) = oneshot::channel();
-        self.tx
-            .send(PurseRequest::GetSpendableBalance { rsp_tx })
-            .await
-            .unwrap();
-        rsp_rx.await.unwrap()
-    }
-
-    pub(crate) async fn allocate_funds(&self, sats: u64) -> Result<(), FatCrabError> {
-        let (rsp_tx, rsp_rx) = oneshot::channel();
-        self.tx
-            .send(PurseRequest::AllocateFunds { sats, rsp_tx })
-            .await
-            .unwrap();
-        rsp_rx.await.unwrap()
-    }
-
-    pub(crate) async fn free_funds(&self, sats: u64) -> Result<(), FatCrabError> {
-        let (rsp_tx, rsp_rx) = oneshot::channel();
-        self.tx
-            .send(PurseRequest::FreeFunds { sats, rsp_tx })
-            .await
-            .unwrap();
-        rsp_rx.await.unwrap()
-    }
-
     pub(crate) async fn get_rx_address(&self) -> Result<Address, FatCrabError> {
         let (rsp_tx, rsp_rx) = oneshot::channel();
         self.tx
@@ -72,14 +45,23 @@ impl PurseAccess {
         rsp_rx.await.unwrap()
     }
 
-    pub(crate) async fn send_to_address(
+    pub(crate) async fn get_spendable_balance(&self) -> Result<u64, FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel();
+        self.tx
+            .send(PurseRequest::GetSpendableBalance { rsp_tx })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
+    pub(crate) async fn allocate_tx(
         &self,
         address: Address,
         sats: u64,
     ) -> Result<Txid, FatCrabError> {
         let (rsp_tx, rsp_rx) = oneshot::channel();
         self.tx
-            .send(PurseRequest::SendToAddress {
+            .send(PurseRequest::AllocateTx {
                 address,
                 sats,
                 rsp_tx,
@@ -89,10 +71,28 @@ impl PurseAccess {
         rsp_rx.await.unwrap()
     }
 
-    pub(crate) async fn get_tx(&self, txid: Txid) -> Result<(), FatCrabError> {
+    pub(crate) async fn free_tx(&self, txid: Txid) -> Result<(), FatCrabError> {
         let (rsp_tx, rsp_rx) = oneshot::channel();
         self.tx
-            .send(PurseRequest::GetTx { txid, rsp_tx })
+            .send(PurseRequest::FreeTx { txid, rsp_tx })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
+    pub(crate) async fn send_tx(&self, txid: Txid) -> Result<(), FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel();
+        self.tx
+            .send(PurseRequest::SendTx { txid, rsp_tx })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
+    pub(crate) async fn get_tx_conf(&self, txid: Txid) -> Result<u32, FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel();
+        self.tx
+            .send(PurseRequest::GetTxConf { txid, rsp_tx })
             .await
             .unwrap();
         rsp_rx.await.unwrap()
@@ -142,28 +142,28 @@ enum PurseRequest {
     GetMnemonic {
         rsp_tx: oneshot::Sender<Result<Mnemonic, FatCrabError>>,
     },
-    GetSpendableBalance {
-        rsp_tx: oneshot::Sender<Result<u64, FatCrabError>>,
-    },
-    AllocateFunds {
-        sats: u64,
-        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
-    },
-    FreeFunds {
-        sats: u64,
-        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
-    },
     GetRxAddress {
         rsp_tx: oneshot::Sender<Result<Address, FatCrabError>>,
     },
-    SendToAddress {
+    GetSpendableBalance {
+        rsp_tx: oneshot::Sender<Result<u64, FatCrabError>>,
+    },
+    AllocateTx {
         address: Address,
         sats: u64,
         rsp_tx: oneshot::Sender<Result<Txid, FatCrabError>>,
     },
-    GetTx {
+    FreeTx {
         txid: Txid,
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
+    },
+    SendTx {
+        txid: Txid,
+        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
+    },
+    GetTxConf {
+        txid: Txid,
+        rsp_tx: oneshot::Sender<Result<u32, FatCrabError>>,
     },
     SyncBlockchain {
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
@@ -175,7 +175,7 @@ struct PurseActor {
     secret_key: SecretKey,
     wallet: Wallet<MemoryDatabase>, // TOOD: This can't be Memory Database forever
     blockchain: RpcBlockchain,
-    funds_allocated: HashSet<u64>,
+    allocated_txs: HashMap<Txid, (PartiallySignedTransaction, TransactionDetails)>,
 }
 
 impl PurseActor {
@@ -223,7 +223,7 @@ impl PurseActor {
             secret_key: key,
             wallet,
             blockchain,
-            funds_allocated: HashSet::new(),
+            allocated_txs: HashMap::new(),
         }
     }
 
@@ -233,27 +233,27 @@ impl PurseActor {
                 PurseRequest::GetMnemonic { rsp_tx } => {
                     self.get_mnemonic(rsp_tx);
                 }
-                PurseRequest::GetSpendableBalance { rsp_tx } => {
-                    self.get_spendable_balance(rsp_tx);
-                }
-                PurseRequest::AllocateFunds { sats, rsp_tx } => {
-                    self.allocate_funds(sats, rsp_tx);
-                }
-                PurseRequest::FreeFunds { sats, rsp_tx } => {
-                    self.free_funds(sats, rsp_tx);
-                }
                 PurseRequest::GetRxAddress { rsp_tx } => {
                     self.get_rx_address(rsp_tx);
                 }
-                PurseRequest::SendToAddress {
+                PurseRequest::GetSpendableBalance { rsp_tx } => {
+                    self.get_spendable_balance(rsp_tx);
+                }
+                PurseRequest::AllocateTx {
                     address,
                     sats,
                     rsp_tx,
                 } => {
-                    self.send_to_address(address, sats, rsp_tx);
+                    self.allocate_tx(address, sats, rsp_tx);
                 }
-                PurseRequest::GetTx { txid, rsp_tx } => {
-                    self.get_tx(txid, rsp_tx);
+                PurseRequest::FreeTx { txid, rsp_tx } => {
+                    self.free_tx(txid, rsp_tx);
+                }
+                PurseRequest::SendTx { txid, rsp_tx } => {
+                    self.send_tx(txid, rsp_tx);
+                }
+                PurseRequest::GetTxConf { txid, rsp_tx } => {
+                    self.get_tx_conf(txid, rsp_tx);
                 }
                 PurseRequest::SyncBlockchain { rsp_tx } => {
                     self.sync_blockchain(rsp_tx);
@@ -270,8 +270,21 @@ impl PurseActor {
         .unwrap();
     }
 
+    pub fn get_rx_address(&self, rsp_tx: oneshot::Sender<Result<Address, FatCrabError>>) {
+        match self.wallet.get_address(AddressIndex::New) {
+            Ok(address) => rsp_tx.send(Ok(address.address)),
+            Err(e) => rsp_tx.send(Err(e.into())),
+        }
+        .unwrap();
+    }
+
     fn total_allocated_sats(&self) -> u64 {
-        self.funds_allocated.iter().sum()
+        self.allocated_txs
+            .iter()
+            .map(|(_, (_, tx_details))| {
+                tx_details.sent + tx_details.fee.unwrap_or(0) - tx_details.received
+            })
+            .sum()
     }
 
     fn actual_spendable_balance(&self) -> u64 {
@@ -286,7 +299,12 @@ impl PurseActor {
         .unwrap();
     }
 
-    pub fn allocate_funds(&self, sats: u64, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+    pub fn allocate_tx(
+        &self,
+        address: Address,
+        sats: u64,
+        rsp_tx: oneshot::Sender<Result<Txid, FatCrabError>>,
+    ) {
         if self.actual_spendable_balance() < sats {
             rsp_tx
                 .send(Err(FatCrabError::Simple {
@@ -294,47 +312,46 @@ impl PurseActor {
                 }))
                 .unwrap();
             return;
-        } else {
-            self.funds_allocated.insert(sats);
-            rsp_tx.send(Ok(())).unwrap();
         }
+
+        let mut tx_builder = self.wallet.build_tx();
+        tx_builder.set_recipients(vec![(address.script_pubkey(), sats)]);
+
+        match tx_builder.finish() {
+            Ok((psbt, tx_details)) => {
+                let txid = tx_details.txid;
+                self.allocated_txs.insert(txid, (psbt, tx_details));
+                rsp_tx.send(Ok(txid)).unwrap();
+            }
+            Err(e) => {
+                rsp_tx.send(Err(e.into())).unwrap();
+                return;
+            }
+        };
     }
 
-    pub fn free_funds(&self, sats: u64, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
-        if self.funds_allocated.remove(&sats) {
+    pub fn free_tx(&self, txid: Txid, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+        if self.allocated_txs.remove(&txid).is_some() {
             rsp_tx.send(Ok(())).unwrap();
         } else {
             rsp_tx
                 .send(Err(FatCrabError::Simple {
-                    description: "Could not find allocated funds".to_string(),
+                    description: "Could not find allocated Tx".to_string(),
                 }))
                 .unwrap();
         }
     }
 
-    pub fn get_rx_address(&self, rsp_tx: oneshot::Sender<Result<Address, FatCrabError>>) {
-        match self.wallet.get_address(AddressIndex::New) {
-            Ok(address) => rsp_tx.send(Ok(address.address)),
-            Err(e) => rsp_tx.send(Err(e.into())),
-        }
-        .unwrap();
-    }
-
-    pub fn send_to_address(
-        &self,
-        address: Address,
-        sats: u64,
-        rsp_tx: oneshot::Sender<Result<Txid, FatCrabError>>,
-    ) {
-        let mut tx_builder = self.wallet.build_tx();
-        tx_builder.set_recipients(vec![(address.script_pubkey(), sats)]);
-
-        let (mut psbt, tx_details) = match tx_builder.finish() {
-            Ok((psbt, tx_details)) => (psbt, tx_details),
-            Err(e) => {
-                rsp_tx.send(Err(e.into())).unwrap();
-                return;
-            }
+    pub fn send_tx(&self, txid: Txid, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+        let mut psbt = if let Some((psbt, _)) = self.allocated_txs.get(&txid) {
+            psbt
+        } else {
+            rsp_tx
+                .send(Err(FatCrabError::Simple {
+                    description: "Could not find allocated Tx".to_string(),
+                }))
+                .unwrap();
+            return;
         };
 
         let signopt: SignOptions = SignOptions {
@@ -353,21 +370,57 @@ impl PurseActor {
             return;
         }
 
-        // If sats match, this is part of a previous funds allocation. Free that allocation
-        if self.funds_allocated.remove(&sats) {
-            debug!("{} allocated sats sent", sats);
+        if self.allocated_txs.remove(&txid).is_some() {
+            rsp_tx.send(Ok(())).unwrap();
         } else {
-            debug!("{} unallocated sats sent", sats);
+            rsp_tx
+                .send(Err(FatCrabError::Simple {
+                    description: "Could not find allocated Tx".to_string(),
+                }))
+                .unwrap();
         }
-
-        rsp_tx.send(Ok(tx_details.txid)).unwrap();
     }
 
-    pub fn get_tx(&self, txid: Txid, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
-        match self.wallet.get_tx(&txid, false) {
-            Ok(_) => rsp_tx.send(Ok(())),
-            Err(e) => rsp_tx.send(Err(e.into())),
+    pub fn get_tx_conf(&self, txid: Txid, rsp_tx: oneshot::Sender<Result<u32, FatCrabError>>) {
+        let height = match self.blockchain.get_height() {
+            Ok(height) => height,
+            Err(e) => {
+                rsp_tx.send(Err(e.into())).unwrap();
+                return;
+            }
         };
+
+        let tx_details = match self.wallet.get_tx(&txid, false) {
+            Ok(tx_details) => match tx_details {
+                Some(tx_details) => tx_details,
+                None => {
+                    rsp_tx.send(Err(FatCrabError::TxNotFound)).unwrap();
+                    return;
+                }
+            },
+            Err(e) => {
+                rsp_tx.send(Err(e.into()));
+                return;
+            }
+        };
+
+        let conf_height = match tx_details.confirmation_time {
+            Some(block_time) => block_time.height,
+            None => {
+                rsp_tx.send(Err(FatCrabError::TxUnconfirmed)).unwrap();
+                return;
+            }
+        };
+
+        if height < conf_height {
+            rsp_tx.send(Err(FatCrabError::Simple {
+                description:
+                    "Tx confirmation height greater than current blockchain height. Unexpected"
+                        .to_string(),
+            }));
+        } else {
+            rsp_tx.send(Ok(height - conf_height));
+        }
     }
 
     pub fn sync_blockchain(&self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
