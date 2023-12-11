@@ -21,7 +21,7 @@ impl SerdeGenericTrait for FatCrabMakeTradeRspSpecifics {
 #[derive(Debug, Clone)]
 pub struct FatCrabTradeRspEnvelope {
     pub trade_rsp: FatCrabTradeRsp,
-    pub(crate) envelope: TradeResponseEnvelope,
+    pub(crate) _envelope: TradeResponseEnvelope,
 }
 
 pub enum FatCrabTradeRspType {

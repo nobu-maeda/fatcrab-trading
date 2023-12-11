@@ -434,7 +434,7 @@ impl FatCrabMakerActor {
 
                 if let Some(notif_tx) = &self.notif_tx {
                     let fatcrab_peer_envelope = FatCrabPeerEnvelope {
-                        envelope: n3xb_peer_envelope,
+                        _envelope: n3xb_peer_envelope,
                         message: fatcrab_peer_message,
                     };
 
@@ -527,8 +527,11 @@ impl FatCrabMakerBuyActor {
             Ok(address) => address,
             Err(error) => {
                 error!(
-                    "Maker w/ TradeUUID {} Address received from Peer {:?} is not {}",
-                    self.order.trade_uuid, fatcrab_peer_message.receive_address, self.purse.network,
+                    "Maker w/ TradeUUID {} Address received from Peer {:?} is not {} - {}",
+                    self.order.trade_uuid,
+                    fatcrab_peer_message.receive_address,
+                    self.purse.network,
+                    error.to_string(),
                 );
                 return true;
             }
@@ -643,8 +646,10 @@ impl FatCrabMakerSellActor {
             Ok(txid) => txid,
             Err(error) => {
                 error!(
-                    "Maker w/ TradeUUID {} Txid received from Peer {:?} is not valid",
-                    self.order.trade_uuid, fatcrab_peer_message.txid,
+                    "Maker w/ TradeUUID {} Txid received from Peer {:?} is not valid - {}",
+                    self.order.trade_uuid,
+                    fatcrab_peer_message.txid,
+                    error.to_string()
                 );
                 return true;
             }

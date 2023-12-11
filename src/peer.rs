@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 pub struct FatCrabPeerEnvelope {
     pub message: FatCrabPeerMessage,
-    pub(crate) envelope: PeerEnvelope,
+    pub(crate) _envelope: PeerEnvelope,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

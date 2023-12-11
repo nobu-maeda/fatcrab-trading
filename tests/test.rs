@@ -5,20 +5,21 @@ mod relay;
 mod test {
     use std::net::SocketAddr;
 
+    use crusty_n3xb::machine::taker;
     use uuid::Uuid;
 
     use fatcrab_trading::{
         maker::FatCrabMakerNotif,
         order::{FatCrabOrder, FatCrabOrderType},
         taker::FatCrabTakerNotif,
-        trade_rsp::FatCrabTradeRsp,
+        trade_rsp::{FatCrabTradeRsp, FatCrabTradeRspType},
         trader::FatCrabTrader,
     };
 
     use crate::{node::Node, relay::Relay};
 
     #[tokio::test]
-    async fn test() {
+    async fn test_buy_order() {
         // Initialize Regtest Bitcoin blockchain & mine 101 blocks
         let node = Node::new();
 
@@ -75,7 +76,7 @@ mod test {
 
         // Maker - Create Fatcrab Maker
         let maker = trader_m
-            .make_order(order, maker_receive_fatcrab_acct_id.clone())
+            .make_buy_order(order, maker_receive_fatcrab_acct_id.clone())
             .await;
 
         // Maker - Create channels & register Notif Tx
@@ -91,7 +92,7 @@ mod test {
         assert_eq!(orders.len(), 1);
 
         // Taker - Create Fatcrab Take Trader & Take Trade Order
-        let taker = trader_t.take_order(orders[0].clone(), None).await;
+        let taker = trader_t.take_buy_order(orders[0].clone()).await;
 
         let (taker_notif_tx, mut taker_notif_rx) =
             tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
@@ -107,9 +108,9 @@ mod test {
         };
 
         // Maker - Send Fatcrab Trade Response w/ Fatcrab address
-        let trade_rsp = FatCrabTradeRsp::Accept(maker_receive_fatcrab_acct_id.to_string());
+        let trade_rsp_type = FatCrabTradeRspType::Accept;
         maker
-            .trade_response(trade_rsp, offer_envelope)
+            .trade_response(trade_rsp_type, offer_envelope)
             .await
             .unwrap();
 
@@ -131,7 +132,7 @@ mod test {
             maker_receive_fatcrab_acct_id
         );
 
-        // Taker - User remitting Fatcrab
+        // Taker - *User remits Fatcrabs
 
         // Taker - User claims Fatcrab remittance, send Peer Message with Bitcoin address
         let taker_fatcrab_remittance_txid = Uuid::new_v4().to_string();
@@ -148,26 +149,38 @@ mod test {
                     &peer_msg_envelope.message.txid,
                     &taker_fatcrab_remittance_txid
                 );
-                assert_eq!(
-                    &peer_msg_envelope.message.receive_address,
-                    &taker_receive_bitcoin_addr.to_string()
-                );
             }
             _ => {
                 panic!("Maker only expects Peer Message at this point");
             }
         }
 
-        // Maker - (Auto) Send Bitcoin to Taker Bitcoin address
+        // Maker - *Confirms Fatcrab have been received
 
-        // Maker - (Auto) Send Fatcrab Peer Message with Bitcoin txid
+        // Maker - Release Bitcoin to Taker Bitcoin address
+        maker.release_notify_peer().await.unwrap();
 
-        // Maker - (Auto) Trade Completion
+        // Maker - TODO: Trade Completion
 
         // Taker - Wait for Fatcrab Peer Message
+        let taker_notif = taker_notif_rx.recv().await.unwrap();
+        let btc_txid = match taker_notif {
+            FatCrabTakerNotif::Peer(peer_msg_envelope) => peer_msg_envelope.message.txid,
+            _ => {
+                panic!("Taker only expects Peer Message at this point");
+            }
+        };
 
-        // Taker - Confirm Bitcoin txid
+        // Mine several blocks to confirm Bitcoin Tx
+        node.generate_blocks(10);
+        trader_t.wallet_blockchain_sync().await.unwrap();
 
+        // Taker - Confirm Bitcoin Tx
+        let tx_conf = taker.check_btc_tx_confirmation().await;
+        println!(
+            "Taker # of Confirmations for Tx {} - {:?}",
+            btc_txid, tx_conf
+        );
         // Taker - Trade Completion
     }
 }

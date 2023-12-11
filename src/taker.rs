@@ -280,7 +280,7 @@ impl FatCrabTakerActor {
                 },
 
                 Some(peer_result) = peer_notif_rx.recv() => {
-
+                    self.handle_peer_notif(peer_result).await;
                 }
             }
         }
@@ -387,7 +387,7 @@ impl FatCrabTakerActor {
 
                 if let Some(notif_tx) = &self.notif_tx {
                     let fatcrab_peer_envelope = FatCrabPeerEnvelope {
-                        envelope: n3xb_peer_envelope,
+                        _envelope: n3xb_peer_envelope,
                         message: fatcrab_peer_message,
                     };
                     notif_tx
@@ -452,7 +452,7 @@ impl FatCrabTakerBuyActor {
         if let Some(notif_tx) = &self.notif_tx {
             // Notify User to remite Fatcrab to Maker
             let fatcrab_trade_rsp_envelope = FatCrabTradeRspEnvelope {
-                envelope: n3xb_trade_rsp_envelope.clone(),
+                _envelope: n3xb_trade_rsp_envelope.clone(),
                 trade_rsp,
             };
             notif_tx
@@ -490,8 +490,10 @@ impl FatCrabTakerBuyActor {
             Ok(txid) => txid,
             Err(error) => {
                 error!(
-                    "Taker w/ TradeUUID {} Txid received from Peer {:?} is not valid",
-                    self.trade_uuid, fatcrab_peer_message.txid,
+                    "Taker w/ TradeUUID {} Txid received from Peer {:?} is not valid - {}",
+                    self.trade_uuid,
+                    fatcrab_peer_message.txid,
+                    error.to_string()
                 );
                 return;
             }
@@ -567,16 +569,17 @@ impl FatCrabTakerSellActor {
                 // There's nothing preventing auto remit pre-allocated funds to Maker
                 // Delay notifying User. User will be notified when Maker notifies Taker that Fatcrab got remitted
                 let address = Address::from_str(&receive_address).unwrap();
-                let btc_addr = match address.require_network(self.purse.network) {
-                    Ok(address) => address,
-                    Err(error) => {
-                        error!(
-                            "Taker w/ TradeUUID {} Address received from Peer {:?} is not {}",
-                            self.trade_uuid, receive_address, self.purse.network,
+                let btc_addr =
+                    match address.require_network(self.purse.network) {
+                        Ok(address) => address,
+                        Err(error) => {
+                            error!(
+                            "Taker w/ TradeUUID {} Address received from Peer {:?} is not {} - {}",
+                            self.trade_uuid, receive_address, self.purse.network, error.to_string()
                         );
-                        return;
-                    }
-                };
+                            return;
+                        }
+                    };
 
                 let txid = match self.purse.send_funds(self.btc_funds_id, btc_addr).await {
                     Ok(txid) => txid,
@@ -594,13 +597,25 @@ impl FatCrabTakerSellActor {
                     receive_address: self.fatcrab_rx_addr.clone(),
                     txid: txid.to_string(),
                 };
-                self.n3xb_taker.send_peer_message(Box::new(message)).await;
+
+                if let Some(error) = self
+                    .n3xb_taker
+                    .send_peer_message(Box::new(message))
+                    .await
+                    .err()
+                {
+                    error!(
+                        "Taker w/ TradeUUID {} unable to send Peer Message - {}",
+                        self.trade_uuid,
+                        error.to_string()
+                    );
+                }
             }
             FatCrabTradeRsp::Reject => {
                 if let Some(notif_tx) = &self.notif_tx {
                     // Notify User that Offer was rejected
                     let fatcrab_trade_rsp_envelope = FatCrabTradeRspEnvelope {
-                        envelope: n3xb_trade_rsp_envelope.clone(),
+                        _envelope: n3xb_trade_rsp_envelope.clone(),
                         trade_rsp,
                     };
                     notif_tx
@@ -617,11 +632,11 @@ impl FatCrabTakerSellActor {
         }
     }
 
-    async fn handle_peer_notif(&mut self, fatcrab_peer_message: &FatCrabPeerMessage) {
+    async fn handle_peer_notif(&mut self, _fatcrab_peer_message: &FatCrabPeerMessage) {
         // Nothing to do here
     }
 
-    async fn notify_peer(&self, txid: String, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+    async fn notify_peer(&self, _txid: String, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
         rsp_tx
             .send(Err(FatCrabError::Simple {
                 description: format!(

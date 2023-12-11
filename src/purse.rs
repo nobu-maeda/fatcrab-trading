@@ -288,7 +288,7 @@ impl PurseActor {
 
     pub fn get_spendable_balance(&self, rsp_tx: oneshot::Sender<Result<u64, FatCrabError>>) {
         match self.wallet.get_balance() {
-            Ok(balance) => rsp_tx.send(Ok(self.actual_spendable_balance())),
+            Ok(_balance) => rsp_tx.send(Ok(self.actual_spendable_balance())),
             Err(e) => rsp_tx.send(Err(e.into())),
         }
         .unwrap();
@@ -403,7 +403,7 @@ impl PurseActor {
                 }
             },
             Err(e) => {
-                rsp_tx.send(Err(e.into()));
+                rsp_tx.send(Err(e.into())).unwrap();
                 return;
             }
         };
@@ -417,13 +417,15 @@ impl PurseActor {
         };
 
         if height < conf_height {
-            rsp_tx.send(Err(FatCrabError::Simple {
-                description:
-                    "Tx confirmation height greater than current blockchain height. Unexpected"
-                        .to_string(),
-            }));
+            rsp_tx
+                .send(Err(FatCrabError::Simple {
+                    description:
+                        "Tx confirmation height greater than current blockchain height. Unexpected"
+                            .to_string(),
+                }))
+                .unwrap();
         } else {
-            rsp_tx.send(Ok(height - conf_height));
+            rsp_tx.send(Ok(height - conf_height)).unwrap();
         }
     }
 
