@@ -41,14 +41,6 @@ pub struct FatCrabTrader {
     takers: RwLock<HashMap<Uuid, FatCrabTakerEnum>>,
     maker_accessors: RwLock<HashMap<Uuid, FatCrabMakerAccessEnum>>,
     taker_accessors: RwLock<HashMap<Uuid, FatCrabTakerAccessEnum>>,
-    // maker_buys: RwLock<HashMap<Uuid, FatCrabMaker<MakerBuy>>>,
-    // maker_sells: RwLock<HashMap<Uuid, FatCrabMaker<MakerSell>>>,
-    // taker_buys: RwLock<HashMap<Uuid, FatCrabTaker<TakerBuy>>>,
-    // taker_sells: RwLock<HashMap<Uuid, FatCrabTaker<TakerSell>>>,
-    // maker_buy_accessors: RwLock<HashMap<Uuid, FatCrabMakerAccess<MakerBuy>>>,
-    // maker_sell_accessors: RwLock<HashMap<Uuid, FatCrabMakerAccess<MakerSell>>>,
-    // taker_buy_accessors: RwLock<HashMap<Uuid, FatCrabTakerAccess<TakerBuy>>>,
-    // taker_sell_accessors: RwLock<HashMap<Uuid, FatCrabTakerAccess<TakerSell>>>,
 }
 
 impl FatCrabTrader {

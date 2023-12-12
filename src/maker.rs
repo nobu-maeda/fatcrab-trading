@@ -78,7 +78,7 @@ impl FatCrabMakerAccess<MakerSell> {
     }
 }
 
-impl FatCrabMakerAccess {
+impl<OrderType> FatCrabMakerAccess<OrderType> {
     pub async fn trade_response(
         &self,
         trade_rsp_type: FatCrabTradeRspType,

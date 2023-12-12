@@ -68,7 +68,7 @@ impl FatCrabTakerAccess<TakerBuy> {
 
 impl FatCrabTakerAccess<TakerSell> {}
 
-impl FatCrabTakerAccess {
+impl<OrderType> FatCrabTakerAccess<OrderType> {
     pub async fn trade_complete(&self) -> Result<(), FatCrabError> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
         self.tx
