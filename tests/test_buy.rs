@@ -1,5 +1,4 @@
-mod node;
-mod relay;
+mod common;
 
 #[cfg(test)]
 mod test {
@@ -14,10 +13,14 @@ mod test {
     };
     use uuid::Uuid;
 
-    use crate::{node::Node, relay::Relay};
+    use super::common::{node::Node, relay::Relay};
 
     #[tokio::test]
     async fn test_buy_order() {
+        const MAKER_BALANCE: u64 = 1000000;
+        const PURCHASE_AMOUNT: f64 = 100.0;
+        const PURCHASE_PRICE: f64 = 1000.0;
+
         // Initialize Regtest Bitcoin blockchain & mine 101 blocks
         let node = Node::new();
 
@@ -43,12 +46,15 @@ mod test {
         // Maker - Create Fatcrab Trader for Maker
         let trader_m = FatCrabTrader::new(node.url(), node.auth(), node.network()).await;
 
-        // TODO: Maker - Fund Maker Fatcrab Trader internal wallet from miner
+        // Maker - Fund Maker Fatcrab Trader internal wallet from miner
         let address_m1 = trader_m.wallet_generate_receive_address().await.unwrap();
-        let _txid1 = node.send_to_address(address_m1, 1000000);
+        let _txid1 = node.send_to_address(address_m1, MAKER_BALANCE);
         node.generate_blocks(1);
         trader_m.wallet_blockchain_sync().await.unwrap();
-        assert_eq!(trader_m.wallet_spendable_balance().await.unwrap(), 1000000);
+        assert_eq!(
+            trader_m.wallet_spendable_balance().await.unwrap(),
+            MAKER_BALANCE
+        );
 
         // Taker - Create Fatcrab Trader for Taker
         let trader_t = FatCrabTrader::new(node.url(), node.auth(), node.network()).await;
@@ -68,8 +74,8 @@ mod test {
         let order = FatCrabOrder {
             order_type: FatCrabOrderType::Buy,
             trade_uuid: Uuid::new_v4(),
-            amount: 100.0,
-            price: 1000.0,
+            amount: PURCHASE_AMOUNT,
+            price: PURCHASE_PRICE,
         };
 
         // Maker - Create Fatcrab Maker
@@ -172,15 +178,19 @@ mod test {
 
         // Mine several blocks to confirm Bitcoin Tx
         node.generate_blocks(10);
+        trader_m.wallet_blockchain_sync().await.unwrap();
         trader_t.wallet_blockchain_sync().await.unwrap();
 
         // Taker - Confirm Bitcoin Tx
         let tx_conf = taker.check_btc_tx_confirmation().await.unwrap();
         assert_eq!(tx_conf, 10 - 1);
 
-        // Taker - Confirm Bitcoin Balance
-        let btc_balance = trader_t.wallet_spendable_balance().await.unwrap();
-        assert_eq!(btc_balance, 100 * 1000);
+        // Confirm Bitcoin Balances
+        let trader_t_balance = trader_t.wallet_spendable_balance().await.unwrap();
+        assert_eq!(trader_t_balance as f64, PURCHASE_AMOUNT * PURCHASE_PRICE);
+
+        let trader_m_balance = trader_m.wallet_spendable_balance().await.unwrap();
+        assert!(trader_m_balance < MAKER_BALANCE - (PURCHASE_AMOUNT * PURCHASE_PRICE) as u64);
 
         // Taker - Trade Completion
         taker.trade_complete().await.unwrap();
