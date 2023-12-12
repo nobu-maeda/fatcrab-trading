@@ -14,7 +14,7 @@ bdk = { git = "https://github.com/nobu-maeda/bdk", branch = "release/0.29", defa
 bitcoin = "0.30"
 bip39 = "2.0"
 core-rpc = "0.17"
-crusty-n3xb = { path = "../crusty-n3xb" }
+crusty-n3xb = { git = "https://github.com/nobu-maeda/crusty-n3xb" }
 log = "0.4"
 
 secp256k1 = "0.27"
