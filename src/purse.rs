@@ -106,11 +106,18 @@ impl PurseAccess {
             .unwrap();
         rsp_rx.await.unwrap()
     }
+
+    pub(crate) async fn shutdown(self) -> Result<(), FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
+        let request = PurseRequest::Shutdown { rsp_tx };
+        self.tx.send(request).await.unwrap();
+        rsp_rx.await.unwrap()
+    }
 }
 
 pub(crate) struct Purse {
     tx: mpsc::Sender<PurseRequest>,
-    task_handle: tokio::task::JoinHandle<()>,
+    pub(crate) task_handle: tokio::task::JoinHandle<()>,
     network: Network,
 }
 
@@ -166,6 +173,9 @@ enum PurseRequest {
         rsp_tx: oneshot::Sender<Result<u32, FatCrabError>>,
     },
     SyncBlockchain {
+        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
+    },
+    Shutdown {
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
     },
 }
@@ -258,11 +268,15 @@ impl PurseActor {
                 PurseRequest::SyncBlockchain { rsp_tx } => {
                     self.sync_blockchain(rsp_tx);
                 }
+                PurseRequest::Shutdown { rsp_tx } => {
+                    self.shutdown(rsp_tx);
+                    return;
+                }
             }
         }
     }
 
-    pub fn get_mnemonic(&self, rsp_tx: oneshot::Sender<Result<Mnemonic, FatCrabError>>) {
+    pub(crate) fn get_mnemonic(&self, rsp_tx: oneshot::Sender<Result<Mnemonic, FatCrabError>>) {
         match Mnemonic::from_entropy(&self.secret_key.secret_bytes()) {
             Ok(mnemonic) => rsp_tx.send(Ok(mnemonic)),
             Err(e) => rsp_tx.send(Err(e.into())),
@@ -270,7 +284,7 @@ impl PurseActor {
         .unwrap();
     }
 
-    pub fn get_rx_address(&self, rsp_tx: oneshot::Sender<Result<Address, FatCrabError>>) {
+    pub(crate) fn get_rx_address(&self, rsp_tx: oneshot::Sender<Result<Address, FatCrabError>>) {
         match self.wallet.get_address(AddressIndex::New) {
             Ok(address) => rsp_tx.send(Ok(address.address)),
             Err(e) => rsp_tx.send(Err(e.into())),
@@ -286,7 +300,7 @@ impl PurseActor {
         self.wallet.get_balance().unwrap().confirmed - self.total_allocated_sats()
     }
 
-    pub fn get_spendable_balance(&self, rsp_tx: oneshot::Sender<Result<u64, FatCrabError>>) {
+    pub(crate) fn get_spendable_balance(&self, rsp_tx: oneshot::Sender<Result<u64, FatCrabError>>) {
         match self.wallet.get_balance() {
             Ok(_balance) => rsp_tx.send(Ok(self.actual_spendable_balance())),
             Err(e) => rsp_tx.send(Err(e.into())),
@@ -294,7 +308,7 @@ impl PurseActor {
         .unwrap();
     }
 
-    pub fn allocate_funds(
+    pub(crate) fn allocate_funds(
         &mut self,
         sats: u64,
         rsp_tx: oneshot::Sender<Result<Uuid, FatCrabError>>,
@@ -313,7 +327,7 @@ impl PurseActor {
         rsp_tx.send(Ok(funds_id)).unwrap();
     }
 
-    pub fn free_funds(
+    pub(crate) fn free_funds(
         &mut self,
         funds_id: Uuid,
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
@@ -329,7 +343,7 @@ impl PurseActor {
         }
     }
 
-    pub fn send_funds(
+    pub(crate) fn send_funds(
         &mut self,
         funds_id: Uuid,
         address: Address,
@@ -385,7 +399,11 @@ impl PurseActor {
         }
     }
 
-    pub fn get_tx_conf(&self, txid: Txid, rsp_tx: oneshot::Sender<Result<u32, FatCrabError>>) {
+    pub(crate) fn get_tx_conf(
+        &self,
+        txid: Txid,
+        rsp_tx: oneshot::Sender<Result<u32, FatCrabError>>,
+    ) {
         let height = match self.blockchain.get_height() {
             Ok(height) => height,
             Err(e) => {
@@ -429,11 +447,15 @@ impl PurseActor {
         }
     }
 
-    pub fn sync_blockchain(&self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+    pub(crate) fn sync_blockchain(&self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
         match self.wallet.sync(&self.blockchain, SyncOptions::default()) {
             Ok(_) => rsp_tx.send(Ok(())),
             Err(e) => rsp_tx.send(Err(e.into())),
         }
         .unwrap();
+    }
+
+    pub(crate) fn shutdown(&self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+        rsp_tx.send(Ok(())).unwrap();
     }
 }

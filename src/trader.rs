@@ -1,7 +1,7 @@
+use log::warn;
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
-    sync::RwLock,
 };
 
 use bip39::Mnemonic;
@@ -13,6 +13,8 @@ use crusty_n3xb::{
     order::FilterTag,
 };
 use secp256k1::{rand, SecretKey, XOnlyPublicKey};
+use tokio::sync::RwLock;
+use tokio::task::JoinError;
 use uuid::Uuid;
 
 use crate::{
@@ -121,11 +123,7 @@ impl FatCrabTrader {
     ) -> FatCrabMakerAccess<MakerBuy> {
         assert_eq!(order.order_type, FatCrabOrderType::Buy);
 
-        let n3xb_maker = self
-            .n3xb_manager
-            .new_maker(order.clone().into())
-            .await
-            .unwrap();
+        let n3xb_maker = self.n3xb_manager.new_maker(order.clone().into()).await;
         let purse_accessor = self.purse.new_accessor();
         let trade_uuid = order.trade_uuid.clone();
 
@@ -134,15 +132,11 @@ impl FatCrabTrader {
         let maker_accessor = maker.new_accessor();
         let maker_return_accessor = maker.new_accessor();
 
-        self.makers
-            .write()
-            .unwrap()
-            .insert(trade_uuid.clone(), FatCrabMakerEnum::Buy(maker));
+        let mut makers = self.makers.write().await;
+        makers.insert(trade_uuid.clone(), FatCrabMakerEnum::Buy(maker));
 
-        self.maker_accessors
-            .write()
-            .unwrap()
-            .insert(trade_uuid, FatCrabMakerAccessEnum::Buy(maker_accessor));
+        let mut maker_accessors = self.maker_accessors.write().await;
+        maker_accessors.insert(trade_uuid, FatCrabMakerAccessEnum::Buy(maker_accessor));
 
         maker_return_accessor
     }
@@ -150,11 +144,7 @@ impl FatCrabTrader {
     pub async fn make_sell_order(&self, order: FatCrabOrder) -> FatCrabMakerAccess<MakerSell> {
         assert_eq!(order.order_type, FatCrabOrderType::Sell);
 
-        let n3xb_maker = self
-            .n3xb_manager
-            .new_maker(order.clone().into())
-            .await
-            .unwrap();
+        let n3xb_maker = self.n3xb_manager.new_maker(order.clone().into()).await;
         let purse_accessor = self.purse.new_accessor();
         let trade_uuid = order.trade_uuid.clone();
 
@@ -162,15 +152,11 @@ impl FatCrabTrader {
         let maker_accessor = maker.new_accessor();
         let maker_return_accessor = maker.new_accessor();
 
-        self.makers
-            .write()
-            .unwrap()
-            .insert(trade_uuid.clone(), FatCrabMakerEnum::Sell(maker));
+        let mut makers = self.makers.write().await;
+        makers.insert(trade_uuid.clone(), FatCrabMakerEnum::Sell(maker));
 
-        self.maker_accessors
-            .write()
-            .unwrap()
-            .insert(trade_uuid, FatCrabMakerAccessEnum::Sell(maker_accessor));
+        let mut maker_accessors = self.maker_accessors.write().await;
+        maker_accessors.insert(trade_uuid, FatCrabMakerAccessEnum::Sell(maker_accessor));
 
         maker_return_accessor
     }
@@ -243,15 +229,11 @@ impl FatCrabTrader {
         let taker_accessor = taker.new_accessor();
         let taker_return_accessor = taker.new_accessor();
 
-        self.takers
-            .write()
-            .unwrap()
-            .insert(trade_uuid.clone(), FatCrabTakerEnum::Buy(taker));
+        let mut takers = self.takers.write().await;
+        takers.insert(trade_uuid.clone(), FatCrabTakerEnum::Buy(taker));
 
-        self.taker_accessors
-            .write()
-            .unwrap()
-            .insert(trade_uuid, FatCrabTakerAccessEnum::Buy(taker_accessor));
+        let mut taker_accessors = self.taker_accessors.write().await;
+        taker_accessors.insert(trade_uuid, FatCrabTakerAccessEnum::Buy(taker_accessor));
 
         taker_return_accessor
     }
@@ -285,18 +267,28 @@ impl FatCrabTrader {
         let taker_accessor = taker.new_accessor();
         let taker_return_accessor = taker.new_accessor();
 
-        self.takers
-            .write()
-            .unwrap()
-            .insert(trade_uuid.clone(), FatCrabTakerEnum::Sell(taker));
+        let mut takers = self.takers.write().await;
+        takers.insert(trade_uuid.clone(), FatCrabTakerEnum::Sell(taker));
 
-        self.taker_accessors
-            .write()
-            .unwrap()
-            .insert(trade_uuid, FatCrabTakerAccessEnum::Sell(taker_accessor));
+        let mut taker_accessors = self.taker_accessors.write().await;
+        taker_accessors.insert(trade_uuid, FatCrabTakerAccessEnum::Sell(taker_accessor));
 
         taker_return_accessor
     }
 
-    pub fn shutdown(self) {}
+    pub async fn shutdown(self) -> Result<(), JoinError> {
+        if let Some(error) = self.purse_accessor.shutdown().await.err() {
+            warn!("Trader error shutting down Purse: {}", error);
+        }
+        self.purse.task_handle.await?;
+        let mut makers = self.makers.write().await;
+        for (_uuid, maker) in makers.drain() {
+            maker.await_task_handle().await?;
+        }
+        let mut takers = self.takers.write().await;
+        for (_uuid, taker) in takers.drain() {
+            taker.await_task_handle().await?;
+        }
+        Ok(())
+    }
 }

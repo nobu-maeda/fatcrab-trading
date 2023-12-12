@@ -5,9 +5,6 @@ mod relay;
 mod test {
     use std::net::SocketAddr;
 
-    use crusty_n3xb::machine::taker;
-    use uuid::Uuid;
-
     use fatcrab_trading::{
         maker::FatCrabMakerNotif,
         order::{FatCrabOrder, FatCrabOrderType},
@@ -15,6 +12,7 @@ mod test {
         trade_rsp::{FatCrabTradeRsp, FatCrabTradeRspType},
         trader::FatCrabTrader,
     };
+    use uuid::Uuid;
 
     use crate::{node::Node, relay::Relay};
 
@@ -160,11 +158,12 @@ mod test {
         // Maker - Release Bitcoin to Taker Bitcoin address
         maker.release_notify_peer().await.unwrap();
 
-        // Maker - TODO: Trade Completion
+        // Maker - Trade Completion
+        maker.trade_complete().await.unwrap();
 
         // Taker - Wait for Fatcrab Peer Message
         let taker_notif = taker_notif_rx.recv().await.unwrap();
-        let btc_txid = match taker_notif {
+        let _btc_txid = match taker_notif {
             FatCrabTakerNotif::Peer(peer_msg_envelope) => peer_msg_envelope.message.txid,
             _ => {
                 panic!("Taker only expects Peer Message at this point");
@@ -176,11 +175,21 @@ mod test {
         trader_t.wallet_blockchain_sync().await.unwrap();
 
         // Taker - Confirm Bitcoin Tx
-        let tx_conf = taker.check_btc_tx_confirmation().await;
-        println!(
-            "Taker # of Confirmations for Tx {} - {:?}",
-            btc_txid, tx_conf
-        );
+        let tx_conf = taker.check_btc_tx_confirmation().await.unwrap();
+        assert_eq!(tx_conf, 10 - 1);
+
+        // Taker - Confirm Bitcoin Balance
+        let btc_balance = trader_t.wallet_spendable_balance().await.unwrap();
+        assert_eq!(btc_balance, 100 * 1000);
+
         // Taker - Trade Completion
+        taker.trade_complete().await.unwrap();
+
+        // Trader Shutdown
+        trader_m.shutdown().await.unwrap();
+        trader_t.shutdown().await.unwrap();
+
+        // Relays Shutdown
+        relays.into_iter().for_each(|r| r.shutdown().unwrap());
     }
 }

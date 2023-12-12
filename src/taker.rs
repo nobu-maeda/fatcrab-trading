@@ -10,6 +10,7 @@ use crusty_n3xb::{
 use tokio::{
     select,
     sync::{mpsc, oneshot},
+    task::JoinError,
 };
 use uuid::Uuid;
 
@@ -68,6 +69,15 @@ impl FatCrabTakerAccess<TakerBuy> {
 impl FatCrabTakerAccess<TakerSell> {}
 
 impl FatCrabTakerAccess {
+    pub async fn trade_complete(&self) -> Result<(), FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
+        self.tx
+            .send(FatCrabTakerRequest::TradeComplete { rsp_tx })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
     pub async fn register_notif_tx(
         &self,
         tx: mpsc::Sender<FatCrabTakerNotif>,
@@ -95,9 +105,18 @@ pub(crate) enum FatCrabTakerEnum {
     Sell(FatCrabTaker<TakerSell>),
 }
 
+impl FatCrabTakerEnum {
+    pub(crate) async fn await_task_handle(self) -> Result<(), JoinError> {
+        match self {
+            FatCrabTakerEnum::Buy(taker) => taker.task_handle.await,
+            FatCrabTakerEnum::Sell(taker) => taker.task_handle.await,
+        }
+    }
+}
+
 pub(crate) struct FatCrabTaker<OrderType = TakerBuy> {
     tx: mpsc::Sender<FatCrabTakerRequest>,
-    task_handle: tokio::task::JoinHandle<()>,
+    pub(crate) task_handle: tokio::task::JoinHandle<()>,
     _order_type: PhantomData<OrderType>,
 }
 
@@ -174,6 +193,9 @@ enum FatCrabTakerRequest {
     },
     CheckBtcTxConf {
         rsp_tx: oneshot::Sender<Result<u32, FatCrabError>>,
+    },
+    TradeComplete {
+        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
     },
     RegisterNotifTx {
         tx: mpsc::Sender<FatCrabTakerNotif>,
@@ -266,6 +288,10 @@ impl FatCrabTakerActor {
                                 }
                             }
                         }
+                        FatCrabTakerRequest::TradeComplete { rsp_tx } => {
+                            self.trade_complete(rsp_tx).await;
+                            return;
+                        }
                         FatCrabTakerRequest::RegisterNotifTx { tx, rsp_tx } => {
                             self.register_notif_tx(tx, rsp_tx).await;
                         }
@@ -282,6 +308,17 @@ impl FatCrabTakerActor {
                 Some(peer_result) = peer_notif_rx.recv() => {
                     self.handle_peer_notif(peer_result).await;
                 }
+            }
+        }
+    }
+
+    async fn trade_complete(&mut self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+        match self.n3xb_taker.trade_complete().await {
+            Ok(_) => {
+                rsp_tx.send(Ok(())).unwrap();
+            }
+            Err(error) => {
+                rsp_tx.send(Err(error.into())).unwrap();
             }
         }
     }
