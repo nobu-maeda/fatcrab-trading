@@ -4,13 +4,13 @@ use bdk::{
     bitcoin::{bip32::ExtendedPrivKey, Network},
     blockchain::{
         rpc::Auth as BdkAuth, Blockchain, ConfigurableBlockchain, GetHeight, RpcBlockchain,
-        RpcConfig,
+        RpcConfig, ElectrumBlockchain, WalletSync,
     },
     database::MemoryDatabase,
     keys::bip39::Mnemonic,
     template::Bip84,
     wallet::AddressIndex,
-    KeychainKind, SignOptions, SyncOptions, Wallet,
+    KeychainKind, SignOptions, SyncOptions, Wallet, electrum_client::Client,
 };
 
 use bitcoin::{Address, Txid};
@@ -19,6 +19,7 @@ use secp256k1::SecretKey;
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
+use crate::common::BlockchainInfo;
 use crate::error::FatCrabError;
 
 pub(crate) struct PurseAccess {
@@ -124,17 +125,31 @@ pub(crate) struct Purse {
 impl Purse {
     pub(crate) fn new(
         key: SecretKey,
-        url: impl Into<String>,
-        auth: Auth,
-        network: Network,
+        info: BlockchainInfo,
     ) -> Self {
         let (tx, rx) = mpsc::channel::<PurseRequest>(10);
-        let mut actor = PurseActor::new(rx, key, url, auth, network);
-        let task_handle = tokio::spawn(async move { actor.run().await });
+        let network = match info {
+            BlockchainInfo::Electrum { network, .. } => network,
+            BlockchainInfo::Rpc { network, .. } => network,
+        };
+
+        let task_handle = tokio::spawn(async move { 
+            match info {
+                BlockchainInfo::Electrum { url, network } => {
+                    let mut actor = PurseActor::<ElectrumBlockchain>::new_with_electrum(rx, key, url, network);
+                    actor.run().await;
+                }
+                BlockchainInfo::Rpc { url, auth, network } => {
+                    let mut actor = PurseActor::<RpcBlockchain>::new_with_rpc(rx, key, url, auth, network);
+                    actor.run().await;
+                }
+            }
+         });
+         
         Self {
             tx,
             task_handle,
-            network,
+            network
         }
     }
 
@@ -180,15 +195,46 @@ enum PurseRequest {
     },
 }
 
-struct PurseActor {
+struct PurseActor<ChainType: Blockchain + GetHeight + WalletSync> {
     rx: mpsc::Receiver<PurseRequest>,
     secret_key: SecretKey,
     wallet: Wallet<MemoryDatabase>, // TOOD: This can't be Memory Database forever
-    blockchain: RpcBlockchain,
+    blockchain: ChainType,
     allocated_funds: HashMap<Uuid, u64>,
 }
 
-impl PurseActor {
+impl PurseActor<ElectrumBlockchain> {
+    pub(crate) fn new_with_electrum(
+        rx: mpsc::Receiver<PurseRequest>,
+        key: SecretKey,
+        url: String,
+        network: Network,
+    ) -> Self {
+        let secret_bytes = key.secret_bytes();
+        let xprv = ExtendedPrivKey::new_master(network, &secret_bytes).unwrap();
+
+        let wallet = Wallet::new(
+            Bip84(xprv, KeychainKind::External),
+            Some(Bip84(xprv, KeychainKind::Internal)),
+            network,
+            MemoryDatabase::default(),
+        )
+        .unwrap();
+
+        let client = Client::new(&url).unwrap();
+        let blockchain = ElectrumBlockchain::from(client);
+
+        Self {
+            rx,
+            secret_key: key,
+            wallet,
+            blockchain,
+            allocated_funds: HashMap::new(),
+        }
+    }
+}
+
+impl PurseActor<RpcBlockchain> {
     fn rpc_to_bdk_auth(auth: Auth) -> BdkAuth {
         match auth {
             Auth::UserPass(username, password) => BdkAuth::UserPass { username, password },
@@ -197,10 +243,10 @@ impl PurseActor {
         }
     }
 
-    pub(crate) fn new(
+    pub(crate) fn new_with_rpc(
         rx: mpsc::Receiver<PurseRequest>,
         key: SecretKey,
-        url: impl Into<String>,
+        url: String,
         auth: Auth,
         network: Network,
     ) -> Self {
@@ -236,7 +282,9 @@ impl PurseActor {
             allocated_funds: HashMap::new(),
         }
     }
+}
 
+impl<ChainType> PurseActor<ChainType> where ChainType: Blockchain + GetHeight + WalletSync {
     async fn run(&mut self) {
         while let Some(req) = self.rx.recv().await {
             match req {

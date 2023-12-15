@@ -5,8 +5,7 @@ use std::{
 };
 
 use bip39::Mnemonic;
-use bitcoin::{Address, Network, Txid};
-use core_rpc::Auth;
+use bitcoin::{Address, Txid};
 use crusty_n3xb::{
     common::types::{BitcoinSettlementMethod, ObligationKind},
     manager::Manager,
@@ -18,7 +17,7 @@ use tokio::task::JoinError;
 use uuid::Uuid;
 
 use crate::{
-    common::FATCRAB_OBLIGATION_CUSTOM_KIND_STRING,
+    common::{FATCRAB_OBLIGATION_CUSTOM_KIND_STRING, BlockchainInfo},
     error::FatCrabError,
     maker::{
         FatCrabMaker, FatCrabMakerAccess, FatCrabMakerAccessEnum, FatCrabMakerEnum, MakerBuy,
@@ -44,20 +43,18 @@ pub struct FatCrabTrader {
 }
 
 impl FatCrabTrader {
-    pub async fn new(url: impl Into<String>, auth: Auth, network: Network) -> Self {
+    pub async fn new(info: BlockchainInfo) -> Self {
         let secret_key = SecretKey::new(&mut rand::thread_rng());
-        Self::new_with_keys(secret_key, url, auth, network).await
+        Self::new_with_keys(secret_key, info).await
     }
 
     pub async fn new_with_keys(
         secret_key: SecretKey,
-        url: impl Into<String>,
-        auth: Auth,
-        network: Network,
+        info: BlockchainInfo,
     ) -> Self {
         let trade_engine_name = "fat-crab-trade-engine";
         let n3xb_manager = Manager::new_with_keys(secret_key, trade_engine_name).await;
-        let purse = Purse::new(secret_key, url, auth, network);
+        let purse = Purse::new(secret_key, info);
         let purse_accessor = purse.new_accessor();
 
         Self {

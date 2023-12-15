@@ -9,7 +9,7 @@ mod test {
         order::{FatCrabOrder, FatCrabOrderType},
         taker::FatCrabTakerNotif,
         trade_rsp::{FatCrabTradeRsp, FatCrabTradeRspType},
-        trader::FatCrabTrader,
+        trader::FatCrabTrader, common::BlockchainInfo,
     };
     use uuid::Uuid;
 
@@ -44,7 +44,8 @@ mod test {
         relays.push(relay);
 
         // Maker - Create Fatcrab Trader for Maker
-        let trader_m = FatCrabTrader::new(node.url(), node.auth(), node.network()).await;
+        let info = BlockchainInfo::Rpc { url: node.url(), auth: node.auth(), network: node.network() };
+        let trader_m = FatCrabTrader::new(info.clone()).await;
 
         // Maker - Fund Maker Fatcrab Trader internal wallet from miner
         let address_m1 = trader_m.wallet_generate_receive_address().await.unwrap();
@@ -57,7 +58,7 @@ mod test {
         );
 
         // Taker - Create Fatcrab Trader for Taker
-        let trader_t = FatCrabTrader::new(node.url(), node.auth(), node.network()).await;
+        let trader_t = FatCrabTrader::new(info).await;
 
         // Add Relays
         let mut relay_addrs: Vec<(String, Option<SocketAddr>)> = Vec::new();
