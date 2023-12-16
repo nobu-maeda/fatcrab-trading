@@ -14,6 +14,11 @@ pub struct FatCrabPeerMessage {
     pub txid: String,
 }
 
+// Workaround to make FFI happy...
+// True reason for violation is a Box<dyn SerdeGenericTrait> deep inside PeerEnvelope
+unsafe impl Sync for FatCrabPeerEnvelope {}
+unsafe impl Send for FatCrabPeerEnvelope {}
+
 #[typetag::serde(name = "fatcrab_peer_message_specifics")]
 impl SerdeGenericTrait for FatCrabPeerMessage {
     fn any_ref(&self) -> &dyn Any {

@@ -24,6 +24,11 @@ pub struct FatCrabTradeRspEnvelope {
     pub(crate) _envelope: TradeResponseEnvelope,
 }
 
+// Workaround to make FFI happy...
+// True reason for violation is a Box<dyn SerdeGenericTrait> deep inside TradeRspEnvelope
+unsafe impl Sync for FatCrabTradeRspEnvelope {}
+unsafe impl Send for FatCrabTradeRspEnvelope {}
+
 pub enum FatCrabTradeRspType {
     Accept,
     Reject,

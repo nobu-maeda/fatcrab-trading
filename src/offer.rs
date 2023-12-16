@@ -27,6 +27,11 @@ pub struct FatCrabOfferEnvelope {
     pub(crate) envelope: OfferEnvelope,
 }
 
+// Workaround to make FFI happy...
+// True reason for violation is a Box<dyn SerdeGenericTrait> deep inside OfferEnvelope
+unsafe impl Sync for FatCrabOfferEnvelope {}
+unsafe impl Send for FatCrabOfferEnvelope {}
+
 #[derive(Debug, Clone)]
 pub(crate) struct FatCrabOffer {}
 
