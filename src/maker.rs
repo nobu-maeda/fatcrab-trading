@@ -2,12 +2,11 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 
 use bitcoin::{Address, Txid};
-use crusty_n3xb::common::error::N3xbError;
 use crusty_n3xb::offer::OfferEnvelope;
 use crusty_n3xb::peer_msg::PeerEnvelope;
 use log::{error, warn};
 
-use crusty_n3xb::machine::maker::MakerAccess;
+use crusty_n3xb::machine::maker::{MakerAccess, MakerNotif};
 use crusty_n3xb::trade_rsp::{TradeResponseBuilder, TradeResponseStatus};
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
@@ -276,16 +275,10 @@ impl FatCrabMakerActor {
     }
 
     async fn run(&mut self) {
-        let (offer_notif_tx, mut offer_notif_rx) = mpsc::channel(5);
-        let (peer_notif_tx, mut peer_notif_rx) = mpsc::channel(5);
+        let (notif_tx, mut notif_rx) = mpsc::channel(5);
 
         self.n3xb_maker
-            .register_offer_notif_tx(offer_notif_tx)
-            .await
-            .unwrap();
-
-        self.n3xb_maker
-            .register_peer_notif_tx(peer_notif_tx)
+            .register_notif_tx(notif_tx)
             .await
             .unwrap();
 
@@ -336,12 +329,20 @@ impl FatCrabMakerActor {
                     }
                 },
 
-                Some(offer_result) = offer_notif_rx.recv() => {
-                    self.handle_offer_notif(offer_result).await;
-                },
-
-                Some(peer_result) = peer_notif_rx.recv() => {
-                    self.handle_peer_notif(peer_result).await;
+                Some(result) = notif_rx.recv() => {
+                    match result {
+                        Ok(notif) => match notif {
+                            MakerNotif::Offer(offer_envelope) => {
+                                self.handle_offer_notif(offer_envelope).await;
+                            },
+                            MakerNotif::Peer(peer_envelope) => {
+                                self.handle_peer_notif(peer_envelope).await;
+                            },
+                        },
+                        Err(error) => {
+                            error!("Maker w/ TradeUUID {} Notification Rx Error - {}", self.order.trade_uuid, error.to_string());
+                        }
+                    }
                 },
             }
         }
@@ -405,90 +406,70 @@ impl FatCrabMakerActor {
         rsp_tx.send(result).unwrap();
     }
 
-    async fn handle_offer_notif(&mut self, offer_result: Result<OfferEnvelope, N3xbError>) {
-        let trade_uuid = self.order.trade_uuid;
-
-        match offer_result {
-            Ok(n3xb_offer_envelope) => {
-                let n3xb_offer = n3xb_offer_envelope.offer.clone();
-                match FatCrabOffer::validate_n3xb_offer(n3xb_offer) {
-                    Ok(_) => {
-                        if let Some(notif_tx) = &self.notif_tx {
-                            let fatcrab_offer_envelope = FatCrabOfferEnvelope {
-                                envelope: n3xb_offer_envelope,
-                            };
-                            notif_tx
-                                .send(FatCrabMakerNotif::Offer(fatcrab_offer_envelope))
-                                .await
-                                .unwrap();
-                        } else {
-                            warn!(
-                                "Maker w/ TradeUUID {} do not have notif_tx registered",
-                                trade_uuid.to_string()
-                            );
-                        }
-                    }
-                    Err(error) => {
-                        error!(
-                            "Maker w/ TradeUUID {} Offer Validation Error - {}",
-                            trade_uuid.to_string(),
-                            error.to_string()
-                        );
-                    }
+    async fn handle_offer_notif(&mut self, offer_envelope: OfferEnvelope) {
+        let n3xb_offer = offer_envelope.offer.clone();
+        match FatCrabOffer::validate_n3xb_offer(n3xb_offer) {
+            Ok(_) => {
+                if let Some(notif_tx) = &self.notif_tx {
+                    let fatcrab_offer_envelope = FatCrabOfferEnvelope {
+                        envelope: offer_envelope,
+                    };
+                    notif_tx
+                        .send(FatCrabMakerNotif::Offer(fatcrab_offer_envelope))
+                        .await
+                        .unwrap();
+                } else {
+                    warn!(
+                        "Maker w/ TradeUUID {} do not have notif_tx registered",
+                        self.order.trade_uuid.to_string()
+                    );
                 }
             }
             Err(error) => {
                 error!(
-                    "Maker w/ TradeUUID {} Offer Notification Rx Error - {}",
-                    trade_uuid.to_string(),
+                    "Maker w/ TradeUUID {} Offer Validation Error - {}",
+                    self.order.trade_uuid.to_string(),
                     error.to_string()
                 );
             }
         }
     }
 
-    async fn handle_peer_notif(&mut self, peer_result: Result<PeerEnvelope, N3xbError>) {
-        match peer_result {
-            Ok(n3xb_peer_envelope) => {
-                let fatcrab_peer_message = n3xb_peer_envelope
-                    .message
-                    .downcast_ref::<FatCrabPeerMessage>()
-                    .unwrap()
-                    .clone();
+    async fn handle_peer_notif(&mut self, peer_envelope: PeerEnvelope) {
+        let fatcrab_peer_message = peer_envelope
+            .message
+            .downcast_ref::<FatCrabPeerMessage>()
+            .unwrap()
+            .clone();
 
-                match self.inner {
-                    FatCrabMakerInnerActor::Buy(ref mut buy_actor) => {
-                        if buy_actor.handle_peer_notif(&fatcrab_peer_message).await {
-                            return;
-                        }
-                    }
-                    FatCrabMakerInnerActor::Sell(ref mut sell_actor) => {
-                        if sell_actor.handle_peer_notif(&fatcrab_peer_message).await {
-                            return;
-                        }
-                    }
-                }
-
-                if let Some(notif_tx) = &self.notif_tx {
-                    let fatcrab_peer_envelope = FatCrabPeerEnvelope {
-                        _envelope: n3xb_peer_envelope,
-                        message: fatcrab_peer_message,
-                    };
-
-                    notif_tx
-                        .send(FatCrabMakerNotif::Peer(fatcrab_peer_envelope))
-                        .await
-                        .unwrap();
-                } else {
-                    warn!(
-                        "Maker w/ TradeUUID {} do not have notif_tx registered",
-                        self.order.trade_uuid
-                    );
+        match self.inner {
+            FatCrabMakerInnerActor::Buy(ref mut buy_actor) => {
+                if buy_actor.handle_peer_notif(&fatcrab_peer_message).await {
+                    return;
                 }
             }
-            Err(error) => {
-                error!("Peer Notification Rx Error - {}", error.to_string());
+            FatCrabMakerInnerActor::Sell(ref mut sell_actor) => {
+                if sell_actor.handle_peer_notif(&fatcrab_peer_message).await {
+                    return;
+                }
             }
+        }
+
+        if let Some(notif_tx) = &self.notif_tx {
+            let fatcrab_peer_envelope = FatCrabPeerEnvelope {
+                _envelope: peer_envelope,
+                message: fatcrab_peer_message,
+            };
+
+            notif_tx
+                .send(FatCrabMakerNotif::Peer(fatcrab_peer_envelope))
+                .await
+                .unwrap();
+        } else {
+            warn!(
+                "Maker w/ TradeUUID {} do not have notif_tx registered",
+                self.order.trade_uuid
+            );
         }
     }
 }
