@@ -28,7 +28,7 @@ pub enum FatCrabTakerNotif {
     Peer(FatCrabPeerEnvelope),
 }
 
-// Just for Typing the Taker purposes
+// Just for purpose of typing the Taker
 pub struct TakerBuy {} //  Means Taker is taking a Buy Order to Sell
 pub struct TakerSell {} // Means Tkaer is taking a Sell Order to Buy
 
@@ -209,8 +209,8 @@ enum FatCrabTakerRequest {
 
 struct FatCrabTakerActor {
     inner: FatCrabTakerInnerActor,
+    trade_uuid: Uuid,
     rx: mpsc::Receiver<FatCrabTakerRequest>,
-    order_envelope: FatCrabOrderEnvelope,
     notif_tx: Option<mpsc::Sender<FatCrabTakerNotif>>,
     n3xb_taker: TakerAccess,
 }
@@ -226,14 +226,13 @@ impl FatCrabTakerActor {
         let inner = match order_envelope.order.order_type {
             FatCrabOrderType::Buy => {
                 let buy_actor =
-                    FatCrabTakerBuyActor::new(order_envelope.clone(), n3xb_taker.clone(), purse)
-                        .await;
+                    FatCrabTakerBuyActor::new(&order_envelope, n3xb_taker.clone(), purse).await;
                 FatCrabTakerInnerActor::Buy(buy_actor)
             }
 
             FatCrabOrderType::Sell => {
                 let sell_actor = FatCrabTakerSellActor::new(
-                    order_envelope.clone(),
+                    &order_envelope,
                     fatcrab_rx_addr.unwrap(),
                     n3xb_taker.clone(),
                     purse,
@@ -245,8 +244,8 @@ impl FatCrabTakerActor {
 
         Self {
             inner,
+            trade_uuid: order_envelope.order.trade_uuid,
             rx,
-            order_envelope,
             notif_tx: None,
             n3xb_taker,
         }
@@ -307,7 +306,7 @@ impl FatCrabTakerActor {
                             }
                         },
                         Err(error) => {
-                            error!("Taker w/ TradeUUID {} Notif Rx Error - {}", self.order_envelope.order.trade_uuid.to_string(), error.to_string());
+                            error!("Taker w/ TradeUUID {} Notif Rx Error - {}", self.trade_uuid, error.to_string());
                         }
                     }
                 },
@@ -349,7 +348,7 @@ impl FatCrabTakerActor {
             let error = FatCrabError::Simple {
                 description: format!(
                     "Taker w/ TradeUUID {} already have notif_tx registered",
-                    self.order_envelope.order.trade_uuid
+                    self.trade_uuid
                 ),
             };
             result = Err(error);
@@ -364,7 +363,7 @@ impl FatCrabTakerActor {
             let error = FatCrabError::Simple {
                 description: format!(
                     "Taker w/ TradeUUID {} expected to already have notif_tx registered",
-                    self.order_envelope.order.trade_uuid
+                    self.trade_uuid
                 ),
             };
             result = Err(error);
@@ -418,7 +417,7 @@ impl FatCrabTakerActor {
         } else {
             warn!(
                 "Taker w/ TradeUUID {} do not have notif_tx registered",
-                self.order_envelope.order.trade_uuid.to_string()
+                self.trade_uuid
             );
         }
     }
@@ -440,7 +439,7 @@ struct FatCrabTakerBuyActor {
 
 impl FatCrabTakerBuyActor {
     async fn new(
-        order_envelope: FatCrabOrderEnvelope,
+        order_envelope: &FatCrabOrderEnvelope,
         n3xb_taker: TakerAccess,
         purse: PurseAccess,
     ) -> Self {
@@ -552,7 +551,7 @@ struct FatCrabTakerSellActor {
 
 impl FatCrabTakerSellActor {
     async fn new(
-        order_envelope: FatCrabOrderEnvelope,
+        order_envelope: &FatCrabOrderEnvelope,
         fatcrab_rx_addr: String,
         n3xb_taker: TakerAccess,
         purse: PurseAccess,

@@ -25,7 +25,7 @@ pub enum FatCrabMakerNotif {
     Peer(FatCrabPeerEnvelope),
 }
 
-// Just for Typing the Maker purposes
+// Just for purpose of typing the Maker
 pub struct MakerBuy {}
 pub struct MakerSell {}
 
@@ -230,8 +230,8 @@ enum FatCrabMakerRequest {
 
 struct FatCrabMakerActor {
     inner: FatCrabMakerInnerActor,
+    trade_uuid: Uuid,
     rx: mpsc::Receiver<FatCrabMakerRequest>,
-    order: FatCrabOrder,
     notif_tx: Option<mpsc::Sender<FatCrabMakerNotif>>,
     n3xb_maker: MakerAccess,
 }
@@ -268,7 +268,7 @@ impl FatCrabMakerActor {
         Self {
             inner,
             rx,
-            order,
+            trade_uuid: order.trade_uuid,
             notif_tx: None,
             n3xb_maker,
         }
@@ -337,7 +337,7 @@ impl FatCrabMakerActor {
                             },
                         },
                         Err(error) => {
-                            error!("Maker w/ TradeUUID {} Notification Rx Error - {}", self.order.trade_uuid, error.to_string());
+                            error!("Maker w/ TradeUUID {} Notification Rx Error - {}", self.trade_uuid, error.to_string());
                         }
                     }
                 },
@@ -379,7 +379,7 @@ impl FatCrabMakerActor {
             let error = FatCrabError::Simple {
                 description: format!(
                     "Maker w/ TradeUUID {} already have notif_tx registered",
-                    self.order.trade_uuid
+                    self.trade_uuid
                 ),
             };
             result = Err(error);
@@ -394,7 +394,7 @@ impl FatCrabMakerActor {
             let error = FatCrabError::Simple {
                 description: format!(
                     "Maker w/ TradeUUID {} expected to already have notif_tx registered",
-                    self.order.trade_uuid
+                    self.trade_uuid
                 ),
             };
             result = Err(error);
@@ -418,14 +418,14 @@ impl FatCrabMakerActor {
                 } else {
                     warn!(
                         "Maker w/ TradeUUID {} do not have notif_tx registered",
-                        self.order.trade_uuid.to_string()
+                        self.trade_uuid.to_string()
                     );
                 }
             }
             Err(error) => {
                 error!(
                     "Maker w/ TradeUUID {} Offer Validation Error - {}",
-                    self.order.trade_uuid.to_string(),
+                    self.trade_uuid.to_string(),
                     error.to_string()
                 );
             }
@@ -465,7 +465,7 @@ impl FatCrabMakerActor {
         } else {
             warn!(
                 "Maker w/ TradeUUID {} do not have notif_tx registered",
-                self.order.trade_uuid
+                self.trade_uuid
             );
         }
     }
@@ -478,7 +478,7 @@ enum FatCrabMakerInnerActor {
 
 struct FatCrabMakerBuyActor {
     notif_tx: Option<mpsc::Sender<FatCrabMakerNotif>>,
-    order: FatCrabOrder,
+    trade_uuid: Uuid,
     fatcrab_rx_addr: String,
     btc_funds_id: Uuid,
     peer_btc_addr: Option<Address>,
@@ -498,7 +498,7 @@ impl FatCrabMakerBuyActor {
 
         Self {
             notif_tx: None,
-            order,
+            trade_uuid: order.trade_uuid,
             fatcrab_rx_addr,
             btc_funds_id,
             peer_btc_addr: None,
@@ -543,7 +543,7 @@ impl FatCrabMakerBuyActor {
             Err(error) => {
                 error!(
                     "Maker w/ TradeUUID {} Address received from Peer {:?} is not {} - {}",
-                    self.order.trade_uuid,
+                    self.trade_uuid,
                     fatcrab_peer_message.receive_address,
                     self.purse.network,
                     error.to_string(),
@@ -560,7 +560,7 @@ impl FatCrabMakerBuyActor {
             .send(Err(FatCrabError::Simple {
                 description: format!(
                     "Maker w/ TradeUUID {} is a Buyer, will not have a Peer BTC Txid to check on",
-                    self.order.trade_uuid
+                    self.trade_uuid
                 ),
             }))
             .unwrap();
@@ -573,7 +573,7 @@ impl FatCrabMakerBuyActor {
                 let error = FatCrabError::Simple {
                     description: format!(
                         "Maker w/ TradeUUID {} should have received BTC address from peer",
-                        self.order.trade_uuid
+                        self.trade_uuid
                     ),
                 };
                 rsp_tx.send(Err(error)).unwrap();
@@ -606,7 +606,7 @@ impl FatCrabMakerBuyActor {
 
 struct FatCrabMakerSellActor {
     notif_tx: Option<mpsc::Sender<FatCrabMakerNotif>>,
-    order: FatCrabOrder,
+    trade_uuid: Uuid,
     btc_rx_addr: Address,
     peer_btc_txid: Option<Txid>,
     n3xb_maker: MakerAccess,
@@ -619,7 +619,7 @@ impl FatCrabMakerSellActor {
 
         Self {
             notif_tx: None,
-            order,
+            trade_uuid: order.trade_uuid,
             btc_rx_addr,
             peer_btc_txid: None,
             n3xb_maker,
@@ -662,7 +662,7 @@ impl FatCrabMakerSellActor {
             Err(error) => {
                 error!(
                     "Maker w/ TradeUUID {} Txid received from Peer {:?} is not valid - {}",
-                    self.order.trade_uuid,
+                    self.trade_uuid,
                     fatcrab_peer_message.txid,
                     error.to_string()
                 );
@@ -681,7 +681,7 @@ impl FatCrabMakerSellActor {
                 let error = FatCrabError::Simple {
                     description: format!(
                         "Maker w/ TradeUUID {} should have received BTC Txid from peer",
-                        self.order.trade_uuid
+                        self.trade_uuid
                     ),
                 };
                 rsp_tx.send(Err(error)).unwrap();
