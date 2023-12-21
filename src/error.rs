@@ -17,6 +17,15 @@ pub enum FatCrabError {
     Bdk {
         error: bdk::Error,
     },
+    Io {
+        error: tokio::io::Error,
+    },
+    JoinError {
+        error: tokio::task::JoinError,
+    },
+    SerdesJson {
+        error: serde_json::Error,
+    },
 }
 
 impl Error for FatCrabError {}
@@ -32,6 +41,9 @@ impl Display for FatCrabError {
             FatCrabError::N3xb { error } => format!("FatCrab-Error | n3xb - {}", error),
             FatCrabError::BdkBip39 { error } => format!("FatCrab-Error | bip39 - {}", error),
             FatCrabError::Bdk { error } => format!("FatCrab-Error | bdk - {}", error),
+            FatCrabError::Io { error } => format!("FatCrab-Error | io - {}", error),
+            FatCrabError::JoinError { error } => format!("FatCrab-Error | join - {}", error),
+            FatCrabError::SerdesJson { error } => format!("FatCrab-Error | json - {}", error),
         };
         write!(f, "{}", error_string)
     }
@@ -52,5 +64,23 @@ impl From<bdk::keys::bip39::Error> for FatCrabError {
 impl From<bdk::Error> for FatCrabError {
     fn from(e: bdk::Error) -> FatCrabError {
         FatCrabError::Bdk { error: e }
+    }
+}
+
+impl From<tokio::io::Error> for FatCrabError {
+    fn from(e: tokio::io::Error) -> FatCrabError {
+        FatCrabError::Io { error: e }
+    }
+}
+
+impl From<tokio::task::JoinError> for FatCrabError {
+    fn from(e: tokio::task::JoinError) -> FatCrabError {
+        FatCrabError::JoinError { error: e }
+    }
+}
+
+impl From<serde_json::Error> for FatCrabError {
+    fn from(e: serde_json::Error) -> FatCrabError {
+        FatCrabError::SerdesJson { error: e }
     }
 }

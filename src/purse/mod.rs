@@ -1,3 +1,4 @@
+mod data;
 mod purse;
 
-pub use purse::*;
+pub(crate) use purse::*;

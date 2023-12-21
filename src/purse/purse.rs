@@ -3,14 +3,15 @@ use std::collections::HashMap;
 use bdk::{
     bitcoin::{bip32::ExtendedPrivKey, Network},
     blockchain::{
-        rpc::Auth as BdkAuth, Blockchain, ConfigurableBlockchain, GetHeight, RpcBlockchain,
-        RpcConfig, ElectrumBlockchain, WalletSync,
+        rpc::Auth as BdkAuth, Blockchain, ConfigurableBlockchain, ElectrumBlockchain, GetHeight,
+        RpcBlockchain, RpcConfig, WalletSync,
     },
     database::MemoryDatabase,
+    electrum_client::Client,
     keys::bip39::Mnemonic,
     template::Bip84,
     wallet::AddressIndex,
-    KeychainKind, SignOptions, SyncOptions, Wallet, electrum_client::Client,
+    KeychainKind, SignOptions, SyncOptions, Wallet,
 };
 
 use bitcoin::{Address, Txid};
@@ -22,6 +23,7 @@ use uuid::Uuid;
 use crate::common::BlockchainInfo;
 use crate::error::FatCrabError;
 
+#[derive(Clone, Debug)]
 pub(crate) struct PurseAccess {
     tx: mpsc::Sender<PurseRequest>,
     pub(crate) network: Network,
@@ -123,33 +125,32 @@ pub(crate) struct Purse {
 }
 
 impl Purse {
-    pub(crate) fn new(
-        key: SecretKey,
-        info: BlockchainInfo,
-    ) -> Self {
+    pub(crate) fn new(key: SecretKey, info: BlockchainInfo) -> Self {
         let (tx, rx) = mpsc::channel::<PurseRequest>(10);
         let network = match info {
             BlockchainInfo::Electrum { network, .. } => network,
             BlockchainInfo::Rpc { network, .. } => network,
         };
 
-        let task_handle = tokio::spawn(async move { 
+        let task_handle = tokio::spawn(async move {
             match info {
                 BlockchainInfo::Electrum { url, network } => {
-                    let mut actor = PurseActor::<ElectrumBlockchain>::new_with_electrum(rx, key, url, network);
+                    let mut actor =
+                        PurseActor::<ElectrumBlockchain>::new_with_electrum(rx, key, url, network);
                     actor.run().await;
                 }
                 BlockchainInfo::Rpc { url, auth, network } => {
-                    let mut actor = PurseActor::<RpcBlockchain>::new_with_rpc(rx, key, url, auth, network);
+                    let mut actor =
+                        PurseActor::<RpcBlockchain>::new_with_rpc(rx, key, url, auth, network);
                     actor.run().await;
                 }
             }
-         });
-         
+        });
+
         Self {
             tx,
             task_handle,
-            network
+            network,
         }
     }
 
@@ -284,7 +285,10 @@ impl PurseActor<RpcBlockchain> {
     }
 }
 
-impl<ChainType> PurseActor<ChainType> where ChainType: Blockchain + GetHeight + WalletSync {
+impl<ChainType> PurseActor<ChainType>
+where
+    ChainType: Blockchain + GetHeight + WalletSync,
+{
     async fn run(&mut self) {
         while let Some(req) = self.rx.recv().await {
             match req {

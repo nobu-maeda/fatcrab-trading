@@ -2,7 +2,7 @@ mod common;
 
 #[cfg(test)]
 mod test {
-    use std::net::SocketAddr;
+    use std::{net::SocketAddr, str::FromStr};
 
     use fatcrab_trading::{
         common::BlockchainInfo,
@@ -12,6 +12,7 @@ mod test {
         trade_rsp::{FatCrabTradeRsp, FatCrabTradeRspType},
         trader::FatCrabTrader,
     };
+    use secp256k1::SecretKey;
     use url::Url;
     use uuid::Uuid;
 
@@ -51,7 +52,10 @@ mod test {
             auth: node.auth(),
             network: node.network(),
         };
-        let trader_m = FatCrabTrader::new(info.clone()).await;
+        let privkey_m =
+            SecretKey::from_str("9709e361864037ef7b929c2b36dc36155568e9a066291dfadc79ed5d106e59f8")
+                .unwrap();
+        let trader_m = FatCrabTrader::new_with_key(privkey_m, info.clone()).await;
 
         // Maker - Fund Maker Fatcrab Trader internal wallet from miner
         let address_m1 = trader_m.wallet_generate_receive_address().await.unwrap();
@@ -64,7 +68,10 @@ mod test {
         );
 
         // Taker - Create Fatcrab Trader for Taker
-        let trader_t = FatCrabTrader::new(info).await;
+        let privkey_t =
+            SecretKey::from_str("80e6f8e839135232972dfc16f2acdaeee9c0bcb4793a8a8249b7e384a51377e1")
+                .unwrap();
+        let trader_t = FatCrabTrader::new_with_key(privkey_t, info).await;
 
         // Add Relays
         let mut relay_addrs: Vec<(Url, Option<SocketAddr>)> = Vec::new();
