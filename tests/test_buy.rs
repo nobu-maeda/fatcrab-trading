@@ -5,12 +5,14 @@ mod test {
     use std::net::SocketAddr;
 
     use fatcrab_trading::{
+        common::BlockchainInfo,
         maker::FatCrabMakerNotif,
         order::{FatCrabOrder, FatCrabOrderType},
         taker::FatCrabTakerNotif,
         trade_rsp::{FatCrabTradeRsp, FatCrabTradeRspType},
-        trader::FatCrabTrader, common::BlockchainInfo,
+        trader::FatCrabTrader,
     };
+    use url::Url;
     use uuid::Uuid;
 
     use super::common::{node::Node, relay::Relay};
@@ -44,7 +46,11 @@ mod test {
         relays.push(relay);
 
         // Maker - Create Fatcrab Trader for Maker
-        let info = BlockchainInfo::Rpc { url: node.url(), auth: node.auth(), network: node.network() };
+        let info = BlockchainInfo::Rpc {
+            url: node.url(),
+            auth: node.auth(),
+            network: node.network(),
+        };
         let trader_m = FatCrabTrader::new(info.clone()).await;
 
         // Maker - Fund Maker Fatcrab Trader internal wallet from miner
@@ -61,10 +67,11 @@ mod test {
         let trader_t = FatCrabTrader::new(info).await;
 
         // Add Relays
-        let mut relay_addrs: Vec<(String, Option<SocketAddr>)> = Vec::new();
+        let mut relay_addrs: Vec<(Url, Option<SocketAddr>)> = Vec::new();
 
         for relay in relays.iter_mut() {
-            relay_addrs.push((format!("{}:{}", "ws://localhost", relay.port), None));
+            let url = Url::parse(&format!("{}:{}", "ws://localhost", relay.port)).unwrap();
+            relay_addrs.push((url, None));
         }
 
         trader_m.add_relays(relay_addrs.clone()).await.unwrap();

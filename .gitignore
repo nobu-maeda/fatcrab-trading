@@ -1,4 +1,9 @@
-/target
-Cargo.lock
 /.vscode
+/target
+/data
+/n3xb_data
+/fatcrab_data
+
+Cargo.lock
+
 .DS_Store

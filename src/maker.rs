@@ -6,7 +6,7 @@ use crusty_n3xb::offer::OfferEnvelope;
 use crusty_n3xb::peer_msg::PeerEnvelope;
 use log::{error, warn};
 
-use crusty_n3xb::machine::maker::{MakerAccess, MakerNotif};
+use crusty_n3xb::maker::{MakerAccess, MakerNotif};
 use crusty_n3xb::trade_rsp::{TradeResponseBuilder, TradeResponseStatus};
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
@@ -277,10 +277,7 @@ impl FatCrabMakerActor {
     async fn run(&mut self) {
         let (notif_tx, mut notif_rx) = mpsc::channel(5);
 
-        self.n3xb_maker
-            .register_notif_tx(notif_tx)
-            .await
-            .unwrap();
+        self.n3xb_maker.register_notif_tx(notif_tx).await.unwrap();
 
         loop {
             select! {

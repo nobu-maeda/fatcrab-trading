@@ -3,6 +3,7 @@ use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
 };
+use url::Url;
 
 use bip39::Mnemonic;
 use bitcoin::{Address, Txid};
@@ -17,7 +18,7 @@ use tokio::task::JoinError;
 use uuid::Uuid;
 
 use crate::{
-    common::{FATCRAB_OBLIGATION_CUSTOM_KIND_STRING, BlockchainInfo},
+    common::{BlockchainInfo, FATCRAB_OBLIGATION_CUSTOM_KIND_STRING},
     error::FatCrabError,
     maker::{
         FatCrabMaker, FatCrabMakerAccess, FatCrabMakerAccessEnum, FatCrabMakerEnum, MakerBuy,
@@ -48,12 +49,9 @@ impl FatCrabTrader {
         Self::new_with_keys(secret_key, info).await
     }
 
-    pub async fn new_with_keys(
-        secret_key: SecretKey,
-        info: BlockchainInfo,
-    ) -> Self {
+    pub async fn new_with_keys(secret_key: SecretKey, info: BlockchainInfo) -> Self {
         let trade_engine_name = "fat-crab-trade-engine";
-        let n3xb_manager = Manager::new_with_keys(secret_key, trade_engine_name).await;
+        let n3xb_manager = Manager::new_with_key(secret_key, trade_engine_name).await;
         let purse = Purse::new(secret_key, info);
         let purse_accessor = purse.new_accessor();
 
@@ -99,7 +97,7 @@ impl FatCrabTrader {
 
     pub async fn add_relays(
         &self,
-        relays: Vec<(String, Option<SocketAddr>)>,
+        relays: Vec<(Url, Option<SocketAddr>)>,
     ) -> Result<(), FatCrabError> {
         self.n3xb_manager.add_relays(relays, true).await?;
         Ok(())

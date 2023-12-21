@@ -4,7 +4,8 @@ use log::{error, warn};
 
 use bitcoin::{address::Address, Txid};
 use crusty_n3xb::{
-    machine::taker::{TakerAccess, TakerNotif}, peer_msg::PeerEnvelope,
+    peer_msg::PeerEnvelope,
+    taker::{TakerAccess, TakerNotif},
     trade_rsp::TradeResponseEnvelope,
 };
 use tokio::{
@@ -254,10 +255,7 @@ impl FatCrabTakerActor {
     async fn run(&mut self) {
         let (notif_tx, mut notif_rx) = mpsc::channel(5);
 
-        self.n3xb_taker
-            .register_notif_tx(notif_tx)
-            .await
-            .unwrap();
+        self.n3xb_taker.register_notif_tx(notif_tx).await.unwrap();
 
         loop {
             select! {
@@ -375,12 +373,8 @@ impl FatCrabTakerActor {
         rsp_tx.send(result).unwrap();
     }
 
-    async fn handle_trade_rsp_notif(
-        &mut self,
-        trade_rsp_envelope: TradeResponseEnvelope,
-    ) {
-        let trade_rsp =
-            FatCrabTradeRsp::from_n3xb_trade_rsp(trade_rsp_envelope.trade_rsp.clone());
+    async fn handle_trade_rsp_notif(&mut self, trade_rsp_envelope: TradeResponseEnvelope) {
+        let trade_rsp = FatCrabTradeRsp::from_n3xb_trade_rsp(trade_rsp_envelope.trade_rsp.clone());
 
         match self.inner {
             FatCrabTakerInnerActor::Buy(ref mut buy_actor) => {
