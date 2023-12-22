@@ -180,6 +180,7 @@ impl FatCrabMakerSellData {
 
     pub(crate) async fn set_peer_btc_txid(&self, txid: Txid) {
         self.store.write().await.peer_btc_txid = Some(txid);
+        self.persister.queue();
     }
 
     pub(crate) async fn terminate(self) {
