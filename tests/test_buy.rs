@@ -95,7 +95,7 @@ mod test {
 
         // Maker - Create Fatcrab Maker
         let maker = trader_m
-            .make_buy_order(order, maker_receive_fatcrab_addr.clone())
+            .make_buy_order(&order, maker_receive_fatcrab_addr.clone())
             .await;
 
         // Maker - Create channels & register Notif Tx
@@ -111,7 +111,7 @@ mod test {
         assert_eq!(orders.len(), 1);
 
         // Taker - Create Fatcrab Take Trader & Take Trade Order
-        let taker = trader_t.take_buy_order(orders[0].clone()).await;
+        let taker = trader_t.take_buy_order(&orders[0]).await;
 
         let (taker_notif_tx, mut taker_notif_rx) =
             tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);

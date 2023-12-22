@@ -156,28 +156,28 @@ impl FatCrabTrader {
                 Self::restore_sell_makers(n3xb_makers, purse_accessor, &maker_sell_dir_path)
                     .await?;
 
-            // let taker_buy_dir_path = Self::taker_buy_data_dir_path(&pubkey_string);
-            // tokio::fs::create_dir_all(&taker_buy_dir_path).await?;
-            // let buy_takers =
-            //     Self::restore_buy_takers(n3xb_takers, purse_accessor, &taker_buy_dir_path).await?;
+            let taker_buy_dir_path = Self::taker_buy_data_dir_path(&pubkey_string);
+            tokio::fs::create_dir_all(&taker_buy_dir_path).await?;
+            let buy_takers =
+                Self::restore_buy_takers(n3xb_takers, purse_accessor, &taker_buy_dir_path).await?;
 
-            // let taker_sell_dir_path = Self::taker_sell_data_dir_path(&pubkey_string);
-            // tokio::fs::create_dir_all(&taker_sell_dir_path).await?;
-            // let sell_takers =
-            //     Self::restore_sell_takers(n3xb_takers, purse_accessor, &taker_sell_dir_path)
-            //         .await?;
+            let taker_sell_dir_path = Self::taker_sell_data_dir_path(&pubkey_string);
+            tokio::fs::create_dir_all(&taker_sell_dir_path).await?;
+            let sell_takers =
+                Self::restore_sell_takers(n3xb_takers, purse_accessor, &taker_sell_dir_path)
+                    .await?;
 
             let makers = buy_makers
                 .into_iter()
                 .chain(sell_makers.into_iter())
                 .collect();
 
-            // let takers = buy_takers
-            //     .into_iter()
-            //     .chain(sell_takers.into_iter())
-            //     .collect();
+            let takers = buy_takers
+                .into_iter()
+                .chain(sell_takers.into_iter())
+                .collect();
 
-            Ok((makers, HashMap::new()))
+            Ok((makers, takers))
         }
         .await;
 
@@ -326,117 +326,117 @@ impl FatCrabTrader {
         Some((trade_uuid, FatCrabMakerEnum::Sell(maker)))
     }
 
-    // async fn restore_buy_takers(
-    //     n3xb_takers: &HashMap<Uuid, TakerAccess>,
-    //     purse_accessor: &PurseAccess,
-    //     taker_buy_dir_path: impl AsRef<Path>,
-    // ) -> Result<HashMap<Uuid, FatCrabTakerEnum>, FatCrabError> {
-    //     let mut takers = HashMap::new();
-    //     let mut taker_files = tokio::fs::read_dir(taker_buy_dir_path.as_ref()).await?;
+    async fn restore_buy_takers(
+        n3xb_takers: &HashMap<Uuid, TakerAccess>,
+        purse_accessor: &PurseAccess,
+        taker_buy_dir_path: impl AsRef<Path>,
+    ) -> Result<HashMap<Uuid, FatCrabTakerEnum>, FatCrabError> {
+        let mut takers = HashMap::new();
+        let mut taker_files = tokio::fs::read_dir(taker_buy_dir_path.as_ref()).await?;
 
-    //     while let Some(taker_file) = taker_files.next_entry().await.unwrap() {
-    //         if let Some((trade_uuid, taker)) =
-    //             Self::restore_buy_taker(n3xb_takers, purse_accessor, taker_file.path()).await
-    //         {
-    //             takers.insert(trade_uuid, taker);
-    //         }
-    //     }
-    //     Ok(takers)
-    // }
+        while let Some(taker_file) = taker_files.next_entry().await.unwrap() {
+            if let Some((trade_uuid, taker)) =
+                Self::restore_buy_taker(n3xb_takers, purse_accessor, taker_file.path()).await
+            {
+                takers.insert(trade_uuid, taker);
+            }
+        }
+        Ok(takers)
+    }
 
-    // async fn restore_buy_taker(
-    //     n3xb_takers: &HashMap<Uuid, TakerAccess>,
-    //     purse_accessor: &PurseAccess,
-    //     taker_buy_data_path: impl AsRef<Path>,
-    // ) -> Option<(Uuid, FatCrabTakerEnum)> {
-    //     let file_stem = match taker_buy_data_path.as_ref().file_stem() {
-    //         Some(stem) => stem,
-    //         None => return None,
-    //     };
+    async fn restore_buy_taker(
+        n3xb_takers: &HashMap<Uuid, TakerAccess>,
+        purse_accessor: &PurseAccess,
+        taker_buy_data_path: impl AsRef<Path>,
+    ) -> Option<(Uuid, FatCrabTakerEnum)> {
+        let file_stem = match taker_buy_data_path.as_ref().file_stem() {
+            Some(stem) => stem,
+            None => return None,
+        };
 
-    //     let trade_uuid_str = match file_stem.to_str() {
-    //         Some(stem_str) => stem_str,
-    //         None => return None,
-    //     };
+        let trade_uuid_str = match file_stem.to_str() {
+            Some(stem_str) => stem_str,
+            None => return None,
+        };
 
-    //     let trade_uuid = match Uuid::parse_str(trade_uuid_str) {
-    //         Ok(uuid) => uuid,
-    //         Err(_) => return None,
-    //     };
+        let trade_uuid = match Uuid::parse_str(trade_uuid_str) {
+            Ok(uuid) => uuid,
+            Err(_) => return None,
+        };
 
-    //     let n3xb_taker = match n3xb_takers.get(&trade_uuid) {
-    //         Some(taker) => taker,
-    //         None => return None,
-    //     };
+        let n3xb_taker = match n3xb_takers.get(&trade_uuid) {
+            Some(taker) => taker,
+            None => return None,
+        };
 
-    //     let taker = match FatCrabTaker::<TakerBuy>::restore(
-    //         n3xb_taker.clone(),
-    //         purse_accessor.clone(),
-    //         taker_buy_data_path,
-    //     )
-    //     .await
-    //     {
-    //         Ok(taker) => taker,
-    //         Err(_) => return None,
-    //     };
-    //     Some((trade_uuid, FatCrabTakerEnum::Buy(taker)))
-    // }
+        let taker = match FatCrabTaker::<TakerBuy>::restore(
+            n3xb_taker.clone(),
+            purse_accessor.clone(),
+            taker_buy_data_path,
+        )
+        .await
+        {
+            Ok(taker) => taker,
+            Err(_) => return None,
+        };
+        Some((trade_uuid, FatCrabTakerEnum::Buy(taker)))
+    }
 
-    // async fn restore_sell_takers(
-    //     n3xb_takers: &HashMap<Uuid, TakerAccess>,
-    //     purse_accessor: &PurseAccess,
-    //     taker_sell_dir_path: impl AsRef<Path>,
-    // ) -> Result<HashMap<Uuid, FatCrabTakerEnum>, FatCrabError> {
-    //     let mut takers = HashMap::new();
-    //     let mut taker_files = tokio::fs::read_dir(taker_sell_dir_path.as_ref()).await?;
+    async fn restore_sell_takers(
+        n3xb_takers: &HashMap<Uuid, TakerAccess>,
+        purse_accessor: &PurseAccess,
+        taker_sell_dir_path: impl AsRef<Path>,
+    ) -> Result<HashMap<Uuid, FatCrabTakerEnum>, FatCrabError> {
+        let mut takers = HashMap::new();
+        let mut taker_files = tokio::fs::read_dir(taker_sell_dir_path.as_ref()).await?;
 
-    //     while let Some(taker_file) = taker_files.next_entry().await.unwrap() {
-    //         if let Some((trade_uuid, taker)) =
-    //             Self::restore_sell_taker(n3xb_takers, purse_accessor, taker_file.path()).await
-    //         {
-    //             takers.insert(trade_uuid, taker);
-    //         }
-    //     }
-    //     Ok(takers)
-    // }
+        while let Some(taker_file) = taker_files.next_entry().await.unwrap() {
+            if let Some((trade_uuid, taker)) =
+                Self::restore_sell_taker(n3xb_takers, purse_accessor, taker_file.path()).await
+            {
+                takers.insert(trade_uuid, taker);
+            }
+        }
+        Ok(takers)
+    }
 
-    // async fn restore_sell_taker(
-    //     n3xb_takers: &HashMap<Uuid, TakerAccess>,
-    //     purse_accessor: &PurseAccess,
-    //     taker_sell_data_path: impl AsRef<Path>,
-    // ) -> Option<(Uuid, FatCrabTakerEnum)> {
-    //     let file_stem = match taker_sell_data_path.as_ref().file_stem() {
-    //         Some(stem) => stem,
-    //         None => return None,
-    //     };
+    async fn restore_sell_taker(
+        n3xb_takers: &HashMap<Uuid, TakerAccess>,
+        purse_accessor: &PurseAccess,
+        taker_sell_data_path: impl AsRef<Path>,
+    ) -> Option<(Uuid, FatCrabTakerEnum)> {
+        let file_stem = match taker_sell_data_path.as_ref().file_stem() {
+            Some(stem) => stem,
+            None => return None,
+        };
 
-    //     let trade_uuid_str = match file_stem.to_str() {
-    //         Some(stem_str) => stem_str,
-    //         None => return None,
-    //     };
+        let trade_uuid_str = match file_stem.to_str() {
+            Some(stem_str) => stem_str,
+            None => return None,
+        };
 
-    //     let trade_uuid = match Uuid::parse_str(trade_uuid_str) {
-    //         Ok(uuid) => uuid,
-    //         Err(_) => return None,
-    //     };
+        let trade_uuid = match Uuid::parse_str(trade_uuid_str) {
+            Ok(uuid) => uuid,
+            Err(_) => return None,
+        };
 
-    //     let n3xb_taker = match n3xb_takers.get(&trade_uuid) {
-    //         Some(taker) => taker,
-    //         None => return None,
-    //     };
+        let n3xb_taker = match n3xb_takers.get(&trade_uuid) {
+            Some(taker) => taker,
+            None => return None,
+        };
 
-    //     let taker = match FatCrabTaker::<TakerSell>::restore(
-    //         n3xb_taker.clone(),
-    //         purse_accessor.clone(),
-    //         taker_sell_data_path,
-    //     )
-    //     .await
-    //     {
-    //         Ok(taker) => taker,
-    //         Err(_) => return None,
-    //     };
-    //     Some((trade_uuid, FatCrabTakerEnum::Sell(taker)))
-    // }
+        let taker = match FatCrabTaker::<TakerSell>::restore(
+            n3xb_taker.clone(),
+            purse_accessor.clone(),
+            taker_sell_data_path,
+        )
+        .await
+        {
+            Ok(taker) => taker,
+            Err(_) => return None,
+        };
+        Some((trade_uuid, FatCrabTakerEnum::Sell(taker)))
+    }
 
     pub async fn wallet_bip39_mnemonic(&self) -> Result<Mnemonic, FatCrabError> {
         self.purse_accessor.get_mnemonic().await
@@ -477,13 +477,12 @@ impl FatCrabTrader {
 
     pub async fn make_buy_order(
         &self,
-        order: FatCrabOrder,
+        order: &FatCrabOrder,
         fatcrab_rx_addr: impl Into<String>,
     ) -> FatCrabMakerAccess<MakerBuy> {
         assert_eq!(order.order_type, FatCrabOrderType::Buy);
 
         let n3xb_maker = self.n3xb_manager.new_maker(order.clone().into()).await;
-        let purse_accessor = self.purse.new_accessor();
         let pubkey = self.n3xb_manager.pubkey().await;
         let trade_uuid = order.trade_uuid.clone();
 
@@ -491,7 +490,7 @@ impl FatCrabTrader {
             order,
             fatcrab_rx_addr,
             n3xb_maker,
-            purse_accessor,
+            self.purse.new_accessor(),
             Self::maker_buy_data_dir_path(pubkey.to_string()),
         )
         .await;
@@ -507,18 +506,17 @@ impl FatCrabTrader {
         maker_return_accessor
     }
 
-    pub async fn make_sell_order(&self, order: FatCrabOrder) -> FatCrabMakerAccess<MakerSell> {
+    pub async fn make_sell_order(&self, order: &FatCrabOrder) -> FatCrabMakerAccess<MakerSell> {
         assert_eq!(order.order_type, FatCrabOrderType::Sell);
 
         let n3xb_maker = self.n3xb_manager.new_maker(order.clone().into()).await;
-        let purse_accessor = self.purse.new_accessor();
         let pubkey = self.n3xb_manager.pubkey().await;
         let trade_uuid = order.trade_uuid.clone();
 
         let maker = FatCrabMaker::<MakerSell>::new(
             order,
             n3xb_maker,
-            purse_accessor,
+            self.purse.new_accessor(),
             Self::maker_sell_data_dir_path(pubkey.to_string()),
         )
         .await;
@@ -581,7 +579,7 @@ impl FatCrabTrader {
 
     pub async fn take_buy_order(
         &self,
-        order_envelope: FatCrabOrderEnvelope,
+        order_envelope: &FatCrabOrderEnvelope,
     ) -> FatCrabTakerAccess<TakerBuy> {
         assert_eq!(order_envelope.order.order_type, FatCrabOrderType::Buy);
 
@@ -594,11 +592,16 @@ impl FatCrabTrader {
             .await
             .unwrap();
         n3xb_taker.take_order().await.unwrap();
+        let pubkey = self.n3xb_manager.pubkey().await;
         let trade_uuid = order_envelope.order.trade_uuid.clone();
 
-        let taker =
-            FatCrabTaker::<TakerBuy>::new(order_envelope, n3xb_taker, self.purse.new_accessor())
-                .await;
+        let taker = FatCrabTaker::<TakerBuy>::new(
+            order_envelope,
+            n3xb_taker,
+            self.purse.new_accessor(),
+            Self::taker_buy_data_dir_path(pubkey.to_string()),
+        )
+        .await;
         let taker_accessor = taker.new_accessor();
         let taker_return_accessor = taker.new_accessor();
 
@@ -613,7 +616,7 @@ impl FatCrabTrader {
 
     pub async fn take_sell_order(
         &self,
-        order_envelope: FatCrabOrderEnvelope,
+        order_envelope: &FatCrabOrderEnvelope,
         fatcrab_rx_addr: impl Into<String>,
     ) -> FatCrabTakerAccess<TakerSell> {
         assert_eq!(order_envelope.order.order_type, FatCrabOrderType::Sell);
@@ -627,7 +630,7 @@ impl FatCrabTrader {
             .await
             .unwrap();
         n3xb_taker.take_order().await.unwrap();
-
+        let pubkey = self.n3xb_manager.pubkey().await;
         let trade_uuid = order_envelope.order.trade_uuid.clone();
 
         let taker = FatCrabTaker::<TakerSell>::new(
@@ -635,6 +638,7 @@ impl FatCrabTrader {
             fatcrab_rx_addr,
             n3xb_taker,
             self.purse.new_accessor(),
+            Self::taker_sell_data_dir_path(pubkey.to_string()),
         )
         .await;
         let taker_accessor = taker.new_accessor();

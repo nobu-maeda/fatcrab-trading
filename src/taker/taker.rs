@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, str::FromStr};
+use std::{marker::PhantomData, path::Path, str::FromStr};
 
 use log::{error, warn};
 
@@ -22,6 +22,8 @@ use crate::{
     purse::PurseAccess,
     trade_rsp::{FatCrabTradeRsp, FatCrabTradeRspEnvelope},
 };
+
+use super::data::{FatCrabTakerBuyData, FatCrabTakerSellData};
 
 pub enum FatCrabTakerNotif {
     TradeRsp(FatCrabTradeRspEnvelope),
@@ -128,20 +130,47 @@ impl FatCrabTaker {
 impl FatCrabTaker<TakerBuy> {
     // Means Taker is taking a Buy Order to Sell
     pub(crate) async fn new(
-        order_envelope: FatCrabOrderEnvelope,
+        order_envelope: &FatCrabOrderEnvelope,
         n3xb_taker: TakerAccess,
         purse: PurseAccess,
+        dir_path: impl AsRef<Path>,
     ) -> Self {
         assert_eq!(order_envelope.order.order_type, FatCrabOrderType::Buy);
         let (tx, rx) =
             mpsc::channel::<FatCrabTakerRequest>(FatCrabTaker::TAKE_TRADE_REQUEST_CHANNEL_SIZE);
-        let mut actor = FatCrabTakerActor::new(rx, order_envelope, None, n3xb_taker, purse).await;
+        let actor = FatCrabTakerActor::new(
+            rx,
+            order_envelope.to_owned(),
+            None,
+            n3xb_taker,
+            purse,
+            dir_path,
+        )
+        .await;
         let task_handle = tokio::spawn(async move { actor.run().await });
         Self {
             tx,
             task_handle,
             _order_type: PhantomData,
         }
+    }
+
+    pub(crate) async fn restore(
+        n3xb_taker: TakerAccess,
+        purse: PurseAccess,
+        data_path: impl AsRef<Path>,
+    ) -> Result<Self, FatCrabError> {
+        let (tx, rx) =
+            mpsc::channel::<FatCrabTakerRequest>(FatCrabTaker::TAKE_TRADE_REQUEST_CHANNEL_SIZE);
+
+        let actor = FatCrabTakerActor::restore_buy_actor(rx, n3xb_taker, purse, data_path).await?;
+        let task_handle = tokio::spawn(async move { actor.run().await });
+
+        Ok(Self {
+            tx,
+            task_handle,
+            _order_type: PhantomData,
+        })
     }
 
     pub(crate) fn new_accessor(&self) -> FatCrabTakerAccess<TakerBuy> {
@@ -155,20 +184,22 @@ impl FatCrabTaker<TakerBuy> {
 impl FatCrabTaker<TakerSell> {
     // Means Taker is taking a Sell Order to Buy
     pub(crate) async fn new(
-        order_envelope: FatCrabOrderEnvelope,
+        order_envelope: &FatCrabOrderEnvelope,
         fatcrab_rx_addr: impl Into<String>,
         n3xb_taker: TakerAccess,
         purse: PurseAccess,
+        dir_path: impl AsRef<Path>,
     ) -> Self {
         assert_eq!(order_envelope.order.order_type, FatCrabOrderType::Sell);
         let (tx, rx) =
             mpsc::channel::<FatCrabTakerRequest>(FatCrabTaker::TAKE_TRADE_REQUEST_CHANNEL_SIZE);
-        let mut actor = FatCrabTakerActor::new(
+        let actor = FatCrabTakerActor::new(
             rx,
-            order_envelope,
+            order_envelope.to_owned(),
             Some(fatcrab_rx_addr.into()),
             n3xb_taker,
             purse,
+            dir_path,
         )
         .await;
         let task_handle = tokio::spawn(async move { actor.run().await });
@@ -177,6 +208,24 @@ impl FatCrabTaker<TakerSell> {
             task_handle,
             _order_type: PhantomData,
         }
+    }
+
+    pub(crate) async fn restore(
+        n3xb_taker: TakerAccess,
+        purse: PurseAccess,
+        data_path: impl AsRef<Path>,
+    ) -> Result<Self, FatCrabError> {
+        let (tx, rx) =
+            mpsc::channel::<FatCrabTakerRequest>(FatCrabTaker::TAKE_TRADE_REQUEST_CHANNEL_SIZE);
+
+        let actor = FatCrabTakerActor::restore_sell_actor(rx, n3xb_taker, purse, data_path).await?;
+        let task_handle = tokio::spawn(async move { actor.run().await });
+
+        Ok(Self {
+            tx,
+            task_handle,
+            _order_type: PhantomData,
+        })
     }
 
     pub(crate) fn new_accessor(&self) -> FatCrabTakerAccess<TakerSell> {
@@ -222,11 +271,13 @@ impl FatCrabTakerActor {
         fatcrab_rx_addr: Option<String>,
         n3xb_taker: TakerAccess,
         purse: PurseAccess,
+        dir_path: impl AsRef<Path>,
     ) -> Self {
         let inner = match order_envelope.order.order_type {
             FatCrabOrderType::Buy => {
                 let buy_actor =
-                    FatCrabTakerBuyActor::new(&order_envelope, n3xb_taker.clone(), purse).await;
+                    FatCrabTakerBuyActor::new(&order_envelope, n3xb_taker.clone(), purse, dir_path)
+                        .await;
                 FatCrabTakerInnerActor::Buy(buy_actor)
             }
 
@@ -236,6 +287,7 @@ impl FatCrabTakerActor {
                     fatcrab_rx_addr.unwrap(),
                     n3xb_taker.clone(),
                     purse,
+                    dir_path,
                 )
                 .await;
                 FatCrabTakerInnerActor::Sell(sell_actor)
@@ -251,7 +303,45 @@ impl FatCrabTakerActor {
         }
     }
 
-    async fn run(&mut self) {
+    async fn restore_buy_actor(
+        rx: mpsc::Receiver<FatCrabTakerRequest>,
+        n3xb_taker: TakerAccess,
+        purse: PurseAccess,
+        data_path: impl AsRef<Path>,
+    ) -> Result<Self, FatCrabError> {
+        let (trade_uuid, actor) =
+            FatCrabTakerBuyActor::restore(n3xb_taker.clone(), purse, data_path).await?;
+        let inner = FatCrabTakerInnerActor::Buy(actor);
+
+        Ok(Self {
+            inner,
+            trade_uuid,
+            rx,
+            notif_tx: None,
+            n3xb_taker,
+        })
+    }
+
+    async fn restore_sell_actor(
+        rx: mpsc::Receiver<FatCrabTakerRequest>,
+        n3xb_taker: TakerAccess,
+        purse: PurseAccess,
+        data_path: impl AsRef<Path>,
+    ) -> Result<Self, FatCrabError> {
+        let (trade_uuid, actor) =
+            FatCrabTakerSellActor::restore(n3xb_taker.clone(), purse, data_path).await?;
+        let inner = FatCrabTakerInnerActor::Sell(actor);
+
+        Ok(Self {
+            inner,
+            trade_uuid,
+            rx,
+            notif_tx: None,
+            n3xb_taker,
+        })
+    }
+
+    async fn run(mut self) {
         let (notif_tx, mut notif_rx) = mpsc::channel(5);
 
         self.n3xb_taker.register_notif_tx(notif_tx).await.unwrap();
@@ -262,26 +352,33 @@ impl FatCrabTakerActor {
                     match request {
                         FatCrabTakerRequest::NotifyPeer { txid, rsp_tx } => {
                             match self.inner {
-                                FatCrabTakerInnerActor::Buy(ref mut buy_actor) => {
+                                FatCrabTakerInnerActor::Buy(ref buy_actor) => {
                                     buy_actor.notify_peer(txid, rsp_tx).await;
                                 }
-                                FatCrabTakerInnerActor::Sell(ref mut sell_actor) => {
+                                FatCrabTakerInnerActor::Sell(ref sell_actor) => {
                                     sell_actor.notify_peer(txid, rsp_tx).await;
                                 }
                             }
                         }
                         FatCrabTakerRequest::CheckBtcTxConf { rsp_tx } => {
                             match self.inner {
-                                FatCrabTakerInnerActor::Buy(ref mut buy_actor) => {
+                                FatCrabTakerInnerActor::Buy(ref buy_actor) => {
                                     buy_actor.check_btc_tx_confirmation(rsp_tx).await;
                                 }
-                                FatCrabTakerInnerActor::Sell(ref mut sell_actor) => {
+                                FatCrabTakerInnerActor::Sell(ref sell_actor) => {
                                     sell_actor.check_btc_tx_confirmation(rsp_tx).await;
                                 }
                             }
                         }
                         FatCrabTakerRequest::TradeComplete { rsp_tx } => {
-                            self.trade_complete(rsp_tx).await;
+                            match self.inner {
+                                FatCrabTakerInnerActor::Buy(buy_actor) => {
+                                    buy_actor.trade_complete(rsp_tx).await;
+                                }
+                                FatCrabTakerInnerActor::Sell(sell_actor) => {
+                                    sell_actor.trade_complete(rsp_tx).await;
+                                }
+                            }
                             return;
                         }
                         FatCrabTakerRequest::RegisterNotifTx { tx, rsp_tx } => {
@@ -310,17 +407,6 @@ impl FatCrabTakerActor {
                         }
                     }
                 },
-            }
-        }
-    }
-
-    async fn trade_complete(&mut self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
-        match self.n3xb_taker.trade_complete().await {
-            Ok(_) => {
-                rsp_tx.send(Ok(())).unwrap();
-            }
-            Err(error) => {
-                rsp_tx.send(Err(error.into())).unwrap();
             }
         }
     }
@@ -429,12 +515,11 @@ enum FatCrabTakerInnerActor {
 }
 
 struct FatCrabTakerBuyActor {
-    notif_tx: Option<mpsc::Sender<FatCrabTakerNotif>>,
     trade_uuid: Uuid,
-    btc_rx_addr: Address,
-    peer_btc_txid: Option<Txid>,
+    data: FatCrabTakerBuyData,
     n3xb_taker: TakerAccess,
     purse: PurseAccess,
+    notif_tx: Option<mpsc::Sender<FatCrabTakerNotif>>,
 }
 
 impl FatCrabTakerBuyActor {
@@ -442,21 +527,45 @@ impl FatCrabTakerBuyActor {
         order_envelope: &FatCrabOrderEnvelope,
         n3xb_taker: TakerAccess,
         purse: PurseAccess,
+        dir_path: impl AsRef<Path>,
     ) -> Self {
         let btc_rx_addr = purse.get_rx_address().await.unwrap();
 
-        Self {
-            notif_tx: None,
-            trade_uuid: order_envelope.order.trade_uuid,
+        let data = FatCrabTakerBuyData::new(
+            order_envelope.order.trade_uuid,
+            purse.network,
             btc_rx_addr,
-            peer_btc_txid: None,
+            dir_path,
+        )
+        .await;
+
+        Self {
+            trade_uuid: order_envelope.order.trade_uuid,
+            data,
             n3xb_taker,
             purse,
+            notif_tx: None,
         }
     }
 
+    async fn restore(
+        n3xb_taker: TakerAccess,
+        purse: PurseAccess,
+        data_path: impl AsRef<Path>,
+    ) -> Result<(Uuid, Self), FatCrabError> {
+        let (trade_uuid, data) = FatCrabTakerBuyData::restore(purse.network, data_path).await?;
+        let actor = Self {
+            trade_uuid,
+            data,
+            n3xb_taker,
+            purse,
+            notif_tx: None,
+        };
+        Ok((trade_uuid, actor))
+    }
+
     async fn handle_trade_rsp_notif(
-        &mut self,
+        &self,
         trade_rsp: FatCrabTradeRsp,
         n3xb_trade_rsp_envelope: TradeResponseEnvelope,
     ) {
@@ -480,7 +589,7 @@ impl FatCrabTakerBuyActor {
 
     async fn notify_peer(&self, txid: String, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
         let message = FatCrabPeerMessage {
-            receive_address: self.btc_rx_addr.to_string(),
+            receive_address: self.data.btc_rx_addr().await.to_string(),
             txid,
         };
 
@@ -494,7 +603,7 @@ impl FatCrabTakerBuyActor {
         }
     }
 
-    async fn handle_peer_notif(&mut self, fatcrab_peer_message: &FatCrabPeerMessage) {
+    async fn handle_peer_notif(&self, fatcrab_peer_message: &FatCrabPeerMessage) {
         // Should be recieving BTC Txid along with Fatcrab Rx Address here
         // Retain and Notify User
         let txid = match Txid::from_str(&fatcrab_peer_message.txid) {
@@ -510,11 +619,11 @@ impl FatCrabTakerBuyActor {
             }
         };
 
-        self.peer_btc_txid = Some(txid);
+        self.data.set_peer_btc_txid(txid).await;
     }
 
     async fn check_btc_tx_confirmation(&self, rsp_tx: oneshot::Sender<Result<u32, FatCrabError>>) {
-        let txid = match self.peer_btc_txid {
+        let txid = match self.data.peer_btc_txid().await {
             Some(txid) => txid,
             None => {
                 let error = FatCrabError::Simple {
@@ -538,15 +647,28 @@ impl FatCrabTakerBuyActor {
 
         rsp_tx.send(Ok(tx_conf)).unwrap();
     }
+
+    async fn trade_complete(self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+        self.data.set_trade_completed().await;
+        self.data.terminate().await;
+
+        match self.n3xb_taker.trade_complete().await {
+            Ok(_) => {
+                rsp_tx.send(Ok(())).unwrap();
+            }
+            Err(error) => {
+                rsp_tx.send(Err(error.into())).unwrap();
+            }
+        }
+    }
 }
 
 struct FatCrabTakerSellActor {
-    notif_tx: Option<mpsc::Sender<FatCrabTakerNotif>>,
     trade_uuid: Uuid,
-    fatcrab_rx_addr: String,
-    btc_funds_id: Uuid,
+    data: FatCrabTakerSellData,
     n3xb_taker: TakerAccess,
     purse: PurseAccess,
+    notif_tx: Option<mpsc::Sender<FatCrabTakerNotif>>,
 }
 
 impl FatCrabTakerSellActor {
@@ -555,18 +677,42 @@ impl FatCrabTakerSellActor {
         fatcrab_rx_addr: String,
         n3xb_taker: TakerAccess,
         purse: PurseAccess,
+        dir_path: impl AsRef<Path>,
     ) -> Self {
         let sats = order_envelope.order.amount * order_envelope.order.price;
         let btc_funds_id = purse.allocate_funds(sats as u64).await.unwrap();
 
-        Self {
-            notif_tx: None,
-            trade_uuid: order_envelope.order.trade_uuid,
-            fatcrab_rx_addr,
+        let data = FatCrabTakerSellData::new(
+            order_envelope.order.trade_uuid,
+            fatcrab_rx_addr.clone(),
             btc_funds_id,
+            dir_path,
+        )
+        .await;
+
+        Self {
+            trade_uuid: order_envelope.order.trade_uuid,
+            data,
             n3xb_taker,
             purse,
+            notif_tx: None,
         }
+    }
+
+    async fn restore(
+        n3xb_taker: TakerAccess,
+        purse: PurseAccess,
+        data_path: impl AsRef<Path>,
+    ) -> Result<(Uuid, Self), FatCrabError> {
+        let (trade_uuid, data) = FatCrabTakerSellData::restore(data_path).await?;
+        let actor = Self {
+            trade_uuid,
+            data,
+            n3xb_taker,
+            purse,
+            notif_tx: None,
+        };
+        Ok((trade_uuid, actor))
     }
 
     async fn handle_trade_rsp_notif(
@@ -592,7 +738,11 @@ impl FatCrabTakerSellActor {
                         }
                     };
 
-                let txid = match self.purse.send_funds(self.btc_funds_id, btc_addr).await {
+                let txid = match self
+                    .purse
+                    .send_funds(self.data.btc_funds_id().await, btc_addr)
+                    .await
+                {
                     Ok(txid) => txid,
                     Err(error) => {
                         error!(
@@ -605,7 +755,7 @@ impl FatCrabTakerSellActor {
                 };
 
                 let message = FatCrabPeerMessage {
-                    receive_address: self.fatcrab_rx_addr.clone(),
+                    receive_address: self.data.fatcrab_rx_addr().await,
                     txid: txid.to_string(),
                 };
 
@@ -667,5 +817,19 @@ impl FatCrabTakerSellActor {
                 ),
             }))
             .unwrap();
+    }
+
+    async fn trade_complete(self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+        self.data.set_trade_completed().await;
+        self.data.terminate().await;
+
+        match self.n3xb_taker.trade_complete().await {
+            Ok(_) => {
+                rsp_tx.send(Ok(())).unwrap();
+            }
+            Err(error) => {
+                rsp_tx.send(Err(error.into())).unwrap();
+            }
+        }
     }
 }

@@ -98,7 +98,7 @@ mod test {
         };
 
         // Maker - Create Fatcrab Maker
-        let maker = trader_m.make_sell_order(order).await;
+        let maker = trader_m.make_sell_order(&order).await;
 
         // Maker Create channels & register Notif Tx
         let (maker_notif_tx, mut maker_notif_rx) =
@@ -115,7 +115,7 @@ mod test {
         // Taker - Create Fatcrab Take Trader & Take Trade Order
         let taker_receive_fatcrab_addr = Uuid::new_v4().to_string();
         let taker = trader_t
-            .take_sell_order(orders[0].clone(), taker_receive_fatcrab_addr)
+            .take_sell_order(&orders[0], taker_receive_fatcrab_addr)
             .await;
 
         let (taker_notif_tx, mut taker_notif_rx) =
