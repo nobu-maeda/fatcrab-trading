@@ -60,46 +60,76 @@ impl FatCrabTrader {
         let purse = Purse::new(secret_key, info);
         let purse_accessor = purse.new_accessor();
 
-        let n3xb_makers = n3xb_manager.get_makers().await;
-        let n3xb_takers = n3xb_manager.get_takers().await;
-        let pubkey = n3xb_manager.pubkey().await;
+        let trader = Self {
+            n3xb_manager,
+            purse,
+            purse_accessor,
+            makers: RwLock::new(HashMap::new()),
+            takers: RwLock::new(HashMap::new()),
+            maker_accessors: RwLock::new(HashMap::new()),
+            taker_accessors: RwLock::new(HashMap::new()),
+        };
 
-        let (makers, takers) = Self::maker_taker_setup_restore(
+        trader.restore().await.unwrap();
+        trader
+    }
+
+    async fn restore(&self) -> Result<(), FatCrabError> {
+        // Reconnect to any relays restored first. If there's Maker & Takers to restore, then likely there's relays already restored and ready to connect.
+        // In a real scenario, there should be better handling to ensure the relays are in a desired state before Maker & Taker restoration.
+        self.n3xb_manager.connect_all_relays().await?;
+
+        let n3xb_makers = self.n3xb_manager.get_makers().await;
+        let n3xb_takers = self.n3xb_manager.get_takers().await;
+        let pubkey = self.n3xb_manager.pubkey().await;
+
+        let (makers, takers) = Self::restore_maker_takers(
             &n3xb_makers,
             &n3xb_takers,
-            &purse_accessor,
+            &self.purse_accessor,
             pubkey.to_string(),
         )
         .await;
 
-        Self {
-            n3xb_manager,
-            purse,
-            purse_accessor,
-            makers: RwLock::new(makers),
-            takers: RwLock::new(takers),
-            maker_accessors: RwLock::new(HashMap::new()),
-            taker_accessors: RwLock::new(HashMap::new()),
-        }
+        let maker_accessors: HashMap<Uuid, FatCrabMakerAccessEnum> = makers
+            .iter()
+            .map(|(trade_uuid, maker)| {
+                let maker_accessor = match maker {
+                    FatCrabMakerEnum::Buy(maker) => {
+                        FatCrabMakerAccessEnum::Buy(maker.new_accessor())
+                    }
+                    FatCrabMakerEnum::Sell(maker) => {
+                        FatCrabMakerAccessEnum::Sell(maker.new_accessor())
+                    }
+                };
+                (trade_uuid.clone(), maker_accessor)
+            })
+            .collect();
+
+        let taker_accessors: HashMap<Uuid, FatCrabTakerAccessEnum> = takers
+            .iter()
+            .map(|(trade_uuid, taker)| {
+                let taker_accessor = match taker {
+                    FatCrabTakerEnum::Buy(taker) => {
+                        FatCrabTakerAccessEnum::Buy(taker.new_accessor())
+                    }
+                    FatCrabTakerEnum::Sell(taker) => {
+                        FatCrabTakerAccessEnum::Sell(taker.new_accessor())
+                    }
+                };
+                (trade_uuid.clone(), taker_accessor)
+            })
+            .collect();
+
+        self.makers.write().await.extend(makers);
+        self.takers.write().await.extend(takers);
+        self.maker_accessors.write().await.extend(maker_accessors);
+        self.taker_accessors.write().await.extend(taker_accessors);
+
+        Ok(())
     }
 
-    fn maker_buy_data_dir_path(identifier: impl AsRef<str>) -> String {
-        format!("{}/{}/makers/buy/", DATA_DIR_PATH_STR, identifier.as_ref())
-    }
-
-    fn maker_sell_data_dir_path(identifier: impl AsRef<str>) -> String {
-        format!("{}/{}/makers/sell/", DATA_DIR_PATH_STR, identifier.as_ref())
-    }
-
-    fn taker_buy_data_dir_path(identifier: impl AsRef<str>) -> String {
-        format!("{}/{}/takers/buy/", DATA_DIR_PATH_STR, identifier.as_ref())
-    }
-
-    fn taker_sell_data_dir_path(identifier: impl AsRef<str>) -> String {
-        format!("{}/{}/takers/sell/", DATA_DIR_PATH_STR, identifier.as_ref())
-    }
-
-    async fn maker_taker_setup_restore(
+    async fn restore_maker_takers(
         n3xb_makers: &HashMap<Uuid, MakerAccess>,
         n3xb_takers: &HashMap<Uuid, TakerAccess>,
         purse_accessor: &PurseAccess,
@@ -168,6 +198,22 @@ impl FatCrabTrader {
         }
     }
 
+    fn maker_buy_data_dir_path(identifier: impl AsRef<str>) -> String {
+        format!("{}/{}/makers/buy/", DATA_DIR_PATH_STR, identifier.as_ref())
+    }
+
+    fn maker_sell_data_dir_path(identifier: impl AsRef<str>) -> String {
+        format!("{}/{}/makers/sell/", DATA_DIR_PATH_STR, identifier.as_ref())
+    }
+
+    fn taker_buy_data_dir_path(identifier: impl AsRef<str>) -> String {
+        format!("{}/{}/takers/buy/", DATA_DIR_PATH_STR, identifier.as_ref())
+    }
+
+    fn taker_sell_data_dir_path(identifier: impl AsRef<str>) -> String {
+        format!("{}/{}/takers/sell/", DATA_DIR_PATH_STR, identifier.as_ref())
+    }
+
     async fn restore_buy_makers(
         n3xb_makers: &HashMap<Uuid, MakerAccess>,
         purse_accessor: &PurseAccess,
@@ -176,7 +222,7 @@ impl FatCrabTrader {
         let mut makers = HashMap::new();
         let mut maker_files = tokio::fs::read_dir(maker_buy_dir_path.as_ref()).await?;
 
-        while let Some(maker_file) = maker_files.next_entry().await.unwrap() {
+        while let Some(maker_file) = maker_files.next_entry().await? {
             if let Some((trade_uuid, maker)) =
                 Self::restore_buy_maker(n3xb_makers, purse_accessor, maker_file.path()).await
             {
@@ -232,7 +278,7 @@ impl FatCrabTrader {
         let mut makers = HashMap::new();
         let mut maker_files = tokio::fs::read_dir(maker_sell_dir_path.as_ref()).await?;
 
-        while let Some(maker_file) = maker_files.next_entry().await.unwrap() {
+        while let Some(maker_file) = maker_files.next_entry().await? {
             if let Some((trade_uuid, maker)) =
                 Self::restore_sell_maker(n3xb_makers, purse_accessor, maker_file.path()).await
             {

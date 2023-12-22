@@ -332,8 +332,6 @@ impl FatCrabMakerActor {
         purse: PurseAccess,
         dir_path: impl AsRef<Path>,
     ) -> Result<Self, FatCrabError> {
-        n3xb_maker.post_new_order().await.unwrap();
-
         let (trade_uuid, actor) =
             FatCrabMakerBuyActor::restore(n3xb_maker.clone(), purse, dir_path).await?;
         let inner = FatCrabMakerInnerActor::Buy(actor);
@@ -353,8 +351,6 @@ impl FatCrabMakerActor {
         purse: PurseAccess,
         dir_path: impl AsRef<Path>,
     ) -> Result<Self, FatCrabError> {
-        n3xb_maker.post_new_order().await.unwrap();
-
         let (trade_uuid, actor) =
             FatCrabMakerSellActor::restore(n3xb_maker.clone(), purse, dir_path).await?;
         let inner = FatCrabMakerInnerActor::Sell(actor);
