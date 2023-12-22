@@ -57,7 +57,12 @@ impl FatCrabTrader {
     pub async fn new_with_key(secret_key: SecretKey, info: BlockchainInfo) -> Self {
         let trade_engine_name = "fat-crab-trade-engine";
         let n3xb_manager = Manager::new_with_key(secret_key, trade_engine_name).await;
-        let purse = Purse::new(secret_key, info);
+        let pubkey = n3xb_manager.pubkey().await;
+        let purse = Purse::new(
+            secret_key,
+            info,
+            Self::purse_data_dir_path(pubkey.to_string()),
+        );
         let purse_accessor = purse.new_accessor();
 
         let trader = Self {
@@ -196,6 +201,10 @@ impl FatCrabTrader {
                 (HashMap::new(), HashMap::new())
             }
         }
+    }
+
+    fn purse_data_dir_path(identifier: impl AsRef<str>) -> String {
+        format!("{}/{}/purse/", DATA_DIR_PATH_STR, identifier.as_ref())
     }
 
     fn maker_buy_data_dir_path(identifier: impl AsRef<str>) -> String {

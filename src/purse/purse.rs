@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use log::{info, warn};
+use std::path::Path;
 
 use bdk::{
     bitcoin::{bip32::ExtendedPrivKey, Network},
@@ -16,12 +17,14 @@ use bdk::{
 
 use bitcoin::{Address, Txid};
 use core_rpc::Auth;
-use secp256k1::SecretKey;
+use secp256k1::{KeyPair, Secp256k1, SecretKey, XOnlyPublicKey};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
 use crate::common::BlockchainInfo;
 use crate::error::FatCrabError;
+
+use super::data::PurseData;
 
 #[derive(Clone, Debug)]
 pub(crate) struct PurseAccess {
@@ -125,23 +128,37 @@ pub(crate) struct Purse {
 }
 
 impl Purse {
-    pub(crate) fn new(key: SecretKey, info: BlockchainInfo) -> Self {
+    pub(crate) fn new(key: SecretKey, info: BlockchainInfo, dir_path: impl AsRef<Path>) -> Self {
         let (tx, rx) = mpsc::channel::<PurseRequest>(10);
         let network = match info {
             BlockchainInfo::Electrum { network, .. } => network,
             BlockchainInfo::Rpc { network, .. } => network,
         };
+        let dir_path_buf = dir_path.as_ref().to_path_buf();
 
         let task_handle = tokio::spawn(async move {
             match info {
                 BlockchainInfo::Electrum { url, network } => {
-                    let mut actor =
-                        PurseActor::<ElectrumBlockchain>::new_with_electrum(rx, key, url, network);
+                    let actor = PurseActor::<ElectrumBlockchain>::new_with_electrum(
+                        rx,
+                        key,
+                        network,
+                        url,
+                        dir_path_buf.clone(),
+                    )
+                    .await;
                     actor.run().await;
                 }
                 BlockchainInfo::Rpc { url, auth, network } => {
-                    let mut actor =
-                        PurseActor::<RpcBlockchain>::new_with_rpc(rx, key, url, auth, network);
+                    let actor = PurseActor::<RpcBlockchain>::new_with_rpc(
+                        rx,
+                        key,
+                        url,
+                        network,
+                        auth,
+                        dir_path_buf.clone(),
+                    )
+                    .await;
                     actor.run().await;
                 }
             }
@@ -161,6 +178,7 @@ impl Purse {
         }
     }
 }
+
 enum PurseRequest {
     GetMnemonic {
         rsp_tx: oneshot::Sender<Result<Mnemonic, FatCrabError>>,
@@ -201,37 +219,21 @@ struct PurseActor<ChainType: Blockchain + GetHeight + WalletSync> {
     secret_key: SecretKey,
     wallet: Wallet<MemoryDatabase>, // TOOD: This can't be Memory Database forever
     blockchain: ChainType,
-    allocated_funds: HashMap<Uuid, u64>,
+    data: PurseData,
 }
 
 impl PurseActor<ElectrumBlockchain> {
-    pub(crate) fn new_with_electrum(
+    pub(crate) async fn new_with_electrum(
         rx: mpsc::Receiver<PurseRequest>,
         key: SecretKey,
-        url: String,
         network: Network,
+        url: String,
+        dir_path: impl AsRef<Path>,
     ) -> Self {
-        let secret_bytes = key.secret_bytes();
-        let xprv = ExtendedPrivKey::new_master(network, &secret_bytes).unwrap();
-
-        let wallet = Wallet::new(
-            Bip84(xprv, KeychainKind::External),
-            Some(Bip84(xprv, KeychainKind::Internal)),
-            network,
-            MemoryDatabase::default(),
-        )
-        .unwrap();
-
         let client = Client::new(&url).unwrap();
         let blockchain = ElectrumBlockchain::from(client);
 
-        Self {
-            rx,
-            secret_key: key,
-            wallet,
-            blockchain,
-            allocated_funds: HashMap::new(),
-        }
+        Self::new(rx, key, network, blockchain, dir_path).await
     }
 }
 
@@ -244,24 +246,14 @@ impl PurseActor<RpcBlockchain> {
         }
     }
 
-    pub(crate) fn new_with_rpc(
+    pub(crate) async fn new_with_rpc(
         rx: mpsc::Receiver<PurseRequest>,
         key: SecretKey,
         url: String,
-        auth: Auth,
         network: Network,
+        auth: Auth,
+        dir_path: impl AsRef<Path>,
     ) -> Self {
-        let secret_bytes = key.secret_bytes();
-        let xprv = ExtendedPrivKey::new_master(network, &secret_bytes).unwrap();
-
-        let wallet = Wallet::new(
-            Bip84(xprv, KeychainKind::External),
-            Some(Bip84(xprv, KeychainKind::Internal)),
-            network,
-            MemoryDatabase::default(),
-        )
-        .unwrap();
-
         // Create a RPC configuration of the running bitcoind backend we created in last step
         // Note: If you are using custom regtest node, use the appropriate url and auth
         let rpc_config = RpcConfig {
@@ -275,13 +267,7 @@ impl PurseActor<RpcBlockchain> {
         // Use the above configuration to create a RPC blockchain backend
         let blockchain = RpcBlockchain::from_config(&rpc_config).unwrap();
 
-        Self {
-            rx,
-            secret_key: key,
-            wallet,
-            blockchain,
-            allocated_funds: HashMap::new(),
-        }
+        Self::new(rx, key, network, blockchain, dir_path).await
     }
 }
 
@@ -289,7 +275,60 @@ impl<ChainType> PurseActor<ChainType>
 where
     ChainType: Blockchain + GetHeight + WalletSync,
 {
-    async fn run(&mut self) {
+    pub(crate) async fn new(
+        rx: mpsc::Receiver<PurseRequest>,
+        key: SecretKey,
+        network: Network,
+        blockchain: ChainType,
+        dir_path: impl AsRef<Path>,
+    ) -> Self {
+        let secret_bytes = key.secret_bytes();
+        let xprv = ExtendedPrivKey::new_master(network, &secret_bytes).unwrap();
+
+        let secp = Secp256k1::new();
+        let keypair = KeyPair::from_secret_key(&secp, &key);
+        let (pubkey, _) = XOnlyPublicKey::from_keypair(&keypair);
+
+        let wallet = Wallet::new(
+            Bip84(xprv, KeychainKind::External),
+            Some(Bip84(xprv, KeychainKind::Internal)),
+            network,
+            MemoryDatabase::default(),
+        )
+        .unwrap();
+
+        let height = blockchain.get_height().unwrap_or(0);
+
+        let data = match PurseData::restore(pubkey.to_string(), &dir_path).await {
+            Ok(data) => {
+                // Check if the restored data matches for height & network
+                if data.network().await != network {
+                    panic!("Network mismatch between restored data and provided network");
+                }
+                if data.height().await > height {
+                    warn!("Block height is higher in restored data than provided network");
+                }
+                data
+            }
+            Err(err) => {
+                info!(
+                    "PurseData not restored from disk. Creating new PurseData - {}",
+                    err
+                );
+                PurseData::new(pubkey.to_string(), network, height, &dir_path)
+            }
+        };
+
+        Self {
+            rx,
+            secret_key: key,
+            wallet,
+            blockchain,
+            data,
+        }
+    }
+
+    async fn run(mut self) {
         while let Some(req) = self.rx.recv().await {
             match req {
                 PurseRequest::GetMnemonic { rsp_tx } => {
@@ -299,20 +338,20 @@ where
                     self.get_rx_address(rsp_tx);
                 }
                 PurseRequest::GetSpendableBalance { rsp_tx } => {
-                    self.get_spendable_balance(rsp_tx);
+                    self.get_spendable_balance(rsp_tx).await;
                 }
                 PurseRequest::AllocateFunds { sats, rsp_tx } => {
-                    self.allocate_funds(sats, rsp_tx);
+                    self.allocate_funds(sats, rsp_tx).await;
                 }
                 PurseRequest::FreeFunds { funds_id, rsp_tx } => {
-                    self.free_funds(funds_id, rsp_tx);
+                    self.free_funds(funds_id, rsp_tx).await;
                 }
                 PurseRequest::SendFunds {
                     funds_id,
                     address,
                     rsp_tx,
                 } => {
-                    self.send_funds(funds_id, address, rsp_tx);
+                    self.send_funds(&funds_id, address, rsp_tx).await;
                 }
                 PurseRequest::GetTxConf { txid, rsp_tx } => {
                     self.get_tx_conf(txid, rsp_tx);
@@ -321,7 +360,7 @@ where
                     self.sync_blockchain(rsp_tx);
                 }
                 PurseRequest::Shutdown { rsp_tx } => {
-                    self.shutdown(rsp_tx);
+                    self.shutdown(rsp_tx).await;
                     return;
                 }
             }
@@ -344,28 +383,31 @@ where
         .unwrap();
     }
 
-    fn total_allocated_sats(&self) -> u64 {
-        self.allocated_funds.values().sum()
+    async fn total_allocated_sats(&self) -> u64 {
+        self.data.total_funds_allocated().await
     }
 
-    fn actual_spendable_balance(&self) -> u64 {
-        self.wallet.get_balance().unwrap().confirmed - self.total_allocated_sats()
+    async fn actual_spendable_balance(&self) -> u64 {
+        self.wallet.get_balance().unwrap().confirmed - self.total_allocated_sats().await
     }
 
-    pub(crate) fn get_spendable_balance(&self, rsp_tx: oneshot::Sender<Result<u64, FatCrabError>>) {
+    pub(crate) async fn get_spendable_balance(
+        &self,
+        rsp_tx: oneshot::Sender<Result<u64, FatCrabError>>,
+    ) {
         match self.wallet.get_balance() {
-            Ok(_balance) => rsp_tx.send(Ok(self.actual_spendable_balance())),
+            Ok(_balance) => rsp_tx.send(Ok(self.actual_spendable_balance().await)),
             Err(e) => rsp_tx.send(Err(e.into())),
         }
         .unwrap();
     }
 
-    pub(crate) fn allocate_funds(
-        &mut self,
+    pub(crate) async fn allocate_funds(
+        &self,
         sats: u64,
         rsp_tx: oneshot::Sender<Result<Uuid, FatCrabError>>,
     ) {
-        if self.actual_spendable_balance() < sats {
+        if self.actual_spendable_balance().await < sats {
             rsp_tx
                 .send(Err(FatCrabError::Simple {
                     description: "Insufficient Funds".to_string(),
@@ -375,16 +417,23 @@ where
         }
 
         let funds_id = Uuid::new_v4();
-        self.allocated_funds.insert(funds_id.clone(), sats);
+        self.data
+            .allocated_funds(&funds_id, sats, self.blockchain.get_height().ok())
+            .await;
         rsp_tx.send(Ok(funds_id)).unwrap();
     }
 
-    pub(crate) fn free_funds(
-        &mut self,
+    pub(crate) async fn free_funds(
+        &self,
         funds_id: Uuid,
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
     ) {
-        if self.allocated_funds.remove(&funds_id).is_some() {
+        if self
+            .data
+            .deallocate_funds(&funds_id, self.blockchain.get_height().ok())
+            .await
+            .is_some()
+        {
             rsp_tx.send(Ok(())).unwrap();
         } else {
             rsp_tx
@@ -395,14 +444,14 @@ where
         }
     }
 
-    pub(crate) fn send_funds(
-        &mut self,
-        funds_id: Uuid,
+    pub(crate) async fn send_funds(
+        &self,
+        funds_id: &Uuid,
         address: Address,
         rsp_tx: oneshot::Sender<Result<Txid, FatCrabError>>,
     ) {
-        let sats = match self.allocated_funds.get(&funds_id) {
-            Some(sats) => *sats,
+        let sats = match self.data.get_allocated_funds(funds_id).await {
+            Some(sats) => sats,
             None => {
                 rsp_tx
                     .send(Err(FatCrabError::Simple {
@@ -440,7 +489,12 @@ where
             return;
         }
 
-        if self.allocated_funds.remove(&funds_id).is_some() {
+        if self
+            .data
+            .deallocate_funds(funds_id, self.blockchain.get_height().ok())
+            .await
+            .is_some()
+        {
             rsp_tx.send(Ok(tx.txid())).unwrap();
         } else {
             rsp_tx
@@ -507,7 +561,8 @@ where
         .unwrap();
     }
 
-    pub(crate) fn shutdown(&self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+    pub(crate) async fn shutdown(self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+        self.data.terminate().await;
         rsp_tx.send(Ok(())).unwrap();
     }
 }
