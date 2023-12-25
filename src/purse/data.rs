@@ -1,14 +1,15 @@
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::Path,
+    sync::{Arc, RwLockReadGuard, RwLockWriteGuard},
+};
 
 use bitcoin::Network;
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
+use std::sync::RwLock;
 use uuid::Uuid;
 
-use crate::{
-    common::{Persister, SerdeGenericTrait},
-    error::FatCrabError,
-};
+use crate::{common::SerdeGenericTrait, error::FatCrabError, persist::std::Persister};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct PurseDataStore {
@@ -54,7 +55,7 @@ impl PurseData {
         Self { store, persister }
     }
 
-    pub(crate) async fn restore(
+    pub(crate) fn restore(
         pubkey_string: impl AsRef<str>,
         dir_path: impl AsRef<Path>,
     ) -> Result<Self, FatCrabError> {
@@ -62,7 +63,7 @@ impl PurseData {
             .as_ref()
             .join(format!("{}.json", pubkey_string.as_ref()));
 
-        let json = Persister::restore(&data_path).await?;
+        let json = Persister::restore(&data_path)?;
         let store = serde_json::from_str::<PurseDataStore>(&json)?;
 
         let store: Arc<RwLock<PurseDataStore>> = Arc::new(RwLock::new(store));
@@ -75,30 +76,43 @@ impl PurseData {
         Ok(data)
     }
 
-    pub(crate) async fn network(&self) -> Network {
-        self.store.read().await.network
+    fn read_store(&self) -> RwLockReadGuard<'_, PurseDataStore> {
+        match self.store.read() {
+            Ok(store) => store,
+            Err(error) => {
+                panic!("Error reading store - {}", error);
+            }
+        }
     }
 
-    pub(crate) async fn height(&self) -> u32 {
-        self.store.read().await.height
+    fn write_store(&self) -> RwLockWriteGuard<'_, PurseDataStore> {
+        match self.store.write() {
+            Ok(store) => store,
+            Err(error) => {
+                panic!("Error writing store - {}", error);
+            }
+        }
     }
 
-    pub(crate) async fn total_funds_allocated(&self) -> u64 {
-        self.store
-            .read()
-            .await
-            .allocated_funds
-            .values()
-            .sum::<u64>()
+    pub(crate) fn network(&self) -> Network {
+        self.read_store().network
     }
 
-    pub(crate) async fn get_allocated_funds(&self, uuid: &Uuid) -> Option<u64> {
-        self.store.read().await.allocated_funds.get(uuid).copied()
+    pub(crate) fn height(&self) -> u32 {
+        self.read_store().height
     }
 
-    pub(crate) async fn allocated_funds(&self, uuid: &Uuid, amount: u64, height: Option<u32>) {
+    pub(crate) fn total_funds_allocated(&self) -> u64 {
+        self.read_store().allocated_funds.values().sum::<u64>()
+    }
+
+    pub(crate) fn get_allocated_funds(&self, uuid: &Uuid) -> Option<u64> {
+        self.read_store().allocated_funds.get(uuid).copied()
+    }
+
+    pub(crate) fn allocated_funds(&self, uuid: &Uuid, amount: u64, height: Option<u32>) {
         {
-            let mut store = self.store.write().await;
+            let mut store = self.write_store();
             store.allocated_funds.insert(uuid.to_owned(), amount);
 
             if let Some(height) = height {
@@ -108,9 +122,9 @@ impl PurseData {
         self.persister.queue();
     }
 
-    pub(crate) async fn deallocate_funds(&self, uuid: &Uuid, height: Option<u32>) -> Option<u64> {
+    pub(crate) fn deallocate_funds(&self, uuid: &Uuid, height: Option<u32>) -> Option<u64> {
         let sats = {
-            let mut store = self.store.write().await;
+            let mut store = self.write_store();
             let sats = store.allocated_funds.remove(uuid);
 
             if let Some(height) = height {
@@ -122,7 +136,7 @@ impl PurseData {
         sats
     }
 
-    pub(crate) async fn terminate(self) {
-        self.persister.terminate().await;
+    pub(crate) fn terminate(self) {
+        self.persister.terminate();
     }
 }

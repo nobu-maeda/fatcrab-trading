@@ -666,7 +666,7 @@ impl FatCrabTrader {
         if let Some(error) = self.purse_accessor.shutdown().await.err() {
             warn!("Trader error shutting down Purse: {}", error);
         }
-        self.purse.task_handle.await?;
+        self.purse.task_handle.join().unwrap();
         let mut makers = self.makers.write().await;
         for (_uuid, maker) in makers.drain() {
             maker.await_task_handle().await?;

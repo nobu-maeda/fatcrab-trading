@@ -6,8 +6,9 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::{
-    common::{parse_address, Persister, SerdeGenericTrait},
+    common::{parse_address, SerdeGenericTrait},
     error::FatCrabError,
+    persist::tokio::Persister,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

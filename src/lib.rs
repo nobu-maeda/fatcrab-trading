@@ -8,4 +8,5 @@ pub mod taker;
 pub mod trade_rsp;
 pub mod trader;
 
+mod persist;
 mod purse;
