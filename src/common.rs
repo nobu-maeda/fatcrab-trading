@@ -1,16 +1,7 @@
-use log::{error, trace};
-use std::{any::Any, path::Path, str::FromStr, sync::Arc};
+use std::{any::Any, str::FromStr};
 
 use bitcoin::{Address, Network};
 use core_rpc::Auth;
-
-use tokio::{
-    io::AsyncWriteExt,
-    select,
-    sync::{mpsc, RwLock, RwLockReadGuard},
-};
-
-use crate::error::FatCrabError;
 
 pub(crate) static FATCRAB_OBLIGATION_CUSTOM_KIND_STRING: &str = "FatCrab";
 

@@ -82,7 +82,7 @@ impl Persister {
         store: RwLockReadGuard<'_, dyn SerdeGenericTrait>,
         data_path: impl AsRef<Path>,
     ) -> Result<(), FatCrabError> {
-        let json = serde_json::to_string(&*store).unwrap();
+        let json = serde_json::to_string(&*store)?;
         let mut file = File::create(data_path.as_ref())?;
         file.write_all(json.as_bytes())?;
         file.sync_all()?;
