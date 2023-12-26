@@ -58,11 +58,11 @@ impl FatCrabTrader {
         let trade_engine_name = "fat-crab-trade-engine";
         let n3xb_manager = Manager::new_with_key(secret_key, trade_engine_name).await;
         let pubkey = n3xb_manager.pubkey().await;
-        let purse = Purse::new(
-            secret_key,
-            info,
-            Self::purse_data_dir_path(pubkey.to_string()),
-        );
+
+        let purse_dir_path = Self::purse_data_dir_path(pubkey.to_string());
+        tokio::fs::create_dir_all(&purse_dir_path).await.unwrap();
+
+        let purse = Purse::new(secret_key, info, purse_dir_path);
         let purse_accessor = purse.new_accessor();
 
         let trader = Self {
