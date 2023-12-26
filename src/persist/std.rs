@@ -42,7 +42,7 @@ impl Persister {
     ) -> (mpsc::SyncSender<PersisterMsg>, std::thread::JoinHandle<()>) {
         let data_path_buf = data_path.as_ref().to_path_buf();
 
-        let (persist_tx, mut persist_rx) = mpsc::sync_channel(1);
+        let (persist_tx, persist_rx) = mpsc::sync_channel(1);
         let task_handle = std::thread::spawn(move || {
             let data_path = data_path_buf.clone();
             loop {
@@ -103,7 +103,7 @@ impl Persister {
         }
     }
 
-    pub(crate) async fn terminate(self) {
+    pub(crate) fn terminate(self) {
         self.persist_tx.send(PersisterMsg::Close).unwrap();
         if let Some(error) = self.task_handle.join().err() {
             error!("Error terminating persistence thread - {:?}", error);

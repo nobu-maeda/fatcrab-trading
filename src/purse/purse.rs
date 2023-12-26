@@ -312,7 +312,7 @@ where
         }
     }
 
-    fn run(mut self) {
+    fn run(self) {
         while let Some(req) = self.rx.recv().ok() {
             match req {
                 PurseRequest::GetMnemonic { rsp_tx } => {
