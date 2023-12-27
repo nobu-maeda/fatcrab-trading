@@ -36,7 +36,7 @@ pub enum FatCrabTradeRspType {
 
 #[derive(Debug, Clone)]
 pub enum FatCrabTradeRsp {
-    Accept(String),
+    Accept { receive_address: String },
     Reject,
 }
 
@@ -47,9 +47,9 @@ impl FatCrabTradeRsp {
             .downcast_ref::<FatCrabMakeTradeRspSpecifics>()
             .unwrap();
         match trade_rsp.trade_response {
-            TradeResponseStatus::Accepted => {
-                FatCrabTradeRsp::Accept(trade_rsp_specifics.receive_address.clone())
-            }
+            TradeResponseStatus::Accepted => FatCrabTradeRsp::Accept {
+                receive_address: trade_rsp_specifics.receive_address.clone(),
+            },
             _ => FatCrabTradeRsp::Reject,
         }
     }

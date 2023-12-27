@@ -721,7 +721,7 @@ impl FatCrabTakerSellActor {
         n3xb_trade_rsp_envelope: TradeResponseEnvelope,
     ) {
         match trade_rsp.clone() {
-            FatCrabTradeRsp::Accept(receive_address) => {
+            FatCrabTradeRsp::Accept { receive_address } => {
                 // For Maker Sell, Taker Buy Orders
                 // There's nothing preventing auto remit pre-allocated funds to Maker
                 // Delay notifying User. User will be notified when Maker notifies Taker that Fatcrab got remitted
