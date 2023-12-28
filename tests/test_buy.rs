@@ -104,10 +104,16 @@ mod test {
         maker.register_notif_tx(maker_notif_tx).await.unwrap();
 
         // Taker - Query Fatcrab Trade Order
-        let orders = trader_t.query_orders(FatCrabOrderType::Sell).await.unwrap();
+        let orders = trader_t
+            .query_orders(Some(FatCrabOrderType::Sell))
+            .await
+            .unwrap();
         assert_eq!(orders.len(), 0);
 
-        let orders = trader_t.query_orders(FatCrabOrderType::Buy).await.unwrap();
+        let orders = trader_t
+            .query_orders(Some(FatCrabOrderType::Buy))
+            .await
+            .unwrap();
         assert_eq!(orders.len(), 1);
 
         // Taker - Create Fatcrab Take Trader & Take Trade Order

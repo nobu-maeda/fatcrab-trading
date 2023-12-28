@@ -543,7 +543,7 @@ impl FatCrabTrader {
 
     pub async fn query_orders(
         &self,
-        order_type: FatCrabOrderType,
+        order_type: Option<FatCrabOrderType>,
     ) -> Result<Vec<FatCrabOrderEnvelope>, FatCrabError> {
         let custom_fatcrab_obligation_kind: ObligationKind =
             ObligationKind::Custom(FATCRAB_OBLIGATION_CUSTOM_KIND_STRING.to_string());
@@ -551,27 +551,29 @@ impl FatCrabTrader {
             ObligationKind::Bitcoin(Some(BitcoinSettlementMethod::Onchain));
 
         let mut filter_tags = Vec::new();
-        match order_type {
-            FatCrabOrderType::Buy => {
-                let maker_obligation_filter = FilterTag::MakerObligations(HashSet::from_iter(
-                    vec![bitcoin_onchain_obligation_kind.clone()].into_iter(),
-                ));
-                let taker_obligation_filter = FilterTag::TakerObligations(HashSet::from_iter(
-                    vec![custom_fatcrab_obligation_kind.clone()].into_iter(),
-                ));
-                filter_tags.push(maker_obligation_filter);
-                filter_tags.push(taker_obligation_filter);
-            }
+        if let Some(order_type) = order_type {
+            match order_type {
+                FatCrabOrderType::Buy => {
+                    let maker_obligation_filter = FilterTag::MakerObligations(HashSet::from_iter(
+                        vec![bitcoin_onchain_obligation_kind.clone()].into_iter(),
+                    ));
+                    let taker_obligation_filter = FilterTag::TakerObligations(HashSet::from_iter(
+                        vec![custom_fatcrab_obligation_kind.clone()].into_iter(),
+                    ));
+                    filter_tags.push(maker_obligation_filter);
+                    filter_tags.push(taker_obligation_filter);
+                }
 
-            FatCrabOrderType::Sell => {
-                let maker_obligation_filter = FilterTag::MakerObligations(HashSet::from_iter(
-                    vec![custom_fatcrab_obligation_kind.clone()].into_iter(),
-                ));
-                let taker_obligation_filter = FilterTag::TakerObligations(HashSet::from_iter(
-                    vec![bitcoin_onchain_obligation_kind.clone()].into_iter(),
-                ));
-                filter_tags.push(maker_obligation_filter);
-                filter_tags.push(taker_obligation_filter);
+                FatCrabOrderType::Sell => {
+                    let maker_obligation_filter = FilterTag::MakerObligations(HashSet::from_iter(
+                        vec![custom_fatcrab_obligation_kind.clone()].into_iter(),
+                    ));
+                    let taker_obligation_filter = FilterTag::TakerObligations(HashSet::from_iter(
+                        vec![bitcoin_onchain_obligation_kind.clone()].into_iter(),
+                    ));
+                    filter_tags.push(maker_obligation_filter);
+                    filter_tags.push(taker_obligation_filter);
+                }
             }
         }
 
