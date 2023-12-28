@@ -2,7 +2,7 @@ use log::{debug, warn};
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
-    path::Path,
+    path::{Path, PathBuf},
 };
 use url::Url;
 
@@ -38,6 +38,7 @@ use crate::{
 
 pub struct FatCrabTrader {
     n3xb_manager: Manager,
+    trader_dir_path: PathBuf,
     purse: Purse,
     purse_accessor: PurseAccess,
     makers: RwLock<HashMap<Uuid, FatCrabMakerEnum>>,
@@ -47,19 +48,34 @@ pub struct FatCrabTrader {
 }
 
 const DATA_DIR_PATH_STR: &str = "fatcrab_data";
+const PURSE_DIR_STR: &str = "purse";
+const MAKER_BUY_DIR_STR: &str = "makers/buy";
+const MAKER_SELL_DIR_STR: &str = "makers/sell";
+const TAKER_BUY_DIR_STR: &str = "takers/buy";
+const TAKER_SELL_DIR_STR: &str = "takers/sell";
 
 impl FatCrabTrader {
-    pub async fn new(info: BlockchainInfo) -> Self {
+    pub async fn new(info: BlockchainInfo, root_dir_path: impl AsRef<Path>) -> Self {
         let secret_key = SecretKey::new(&mut rand::thread_rng());
-        Self::new_with_key(secret_key, info).await
+        Self::new_with_key(secret_key, info, root_dir_path).await
     }
 
-    pub async fn new_with_key(secret_key: SecretKey, info: BlockchainInfo) -> Self {
+    pub async fn new_with_key(
+        secret_key: SecretKey,
+        info: BlockchainInfo,
+        root_dir_path: impl AsRef<Path>,
+    ) -> Self {
         let trade_engine_name = "fat-crab-trade-engine";
-        let n3xb_manager = Manager::new_with_key(secret_key, trade_engine_name).await;
+        let n3xb_manager =
+            Manager::new_with_key(secret_key, trade_engine_name, &root_dir_path).await;
         let pubkey = n3xb_manager.pubkey().await;
 
-        let purse_dir_path = Self::purse_data_dir_path(pubkey.to_string());
+        let trader_dir_path =
+            root_dir_path
+                .as_ref()
+                .join(format!("{}/{}", DATA_DIR_PATH_STR, pubkey.to_string()));
+
+        let purse_dir_path = trader_dir_path.join(PURSE_DIR_STR);
         tokio::fs::create_dir_all(&purse_dir_path).await.unwrap();
 
         let purse = Purse::new(secret_key, info, purse_dir_path);
@@ -67,6 +83,7 @@ impl FatCrabTrader {
 
         let trader = Self {
             n3xb_manager,
+            trader_dir_path,
             purse,
             purse_accessor,
             makers: RwLock::new(HashMap::new()),
@@ -93,6 +110,7 @@ impl FatCrabTrader {
             &n3xb_takers,
             &self.purse_accessor,
             pubkey.to_string(),
+            &self.trader_dir_path,
         )
         .await;
 
@@ -139,6 +157,7 @@ impl FatCrabTrader {
         n3xb_takers: &HashMap<Uuid, TakerAccess>,
         purse_accessor: &PurseAccess,
         pubkey_string: impl AsRef<str>,
+        trader_dir_path: impl AsRef<Path>,
     ) -> (
         HashMap<Uuid, FatCrabMakerEnum>,
         HashMap<Uuid, FatCrabTakerEnum>,
@@ -150,23 +169,23 @@ impl FatCrabTrader {
             ),
             FatCrabError,
         > = async {
-            let maker_buy_dir_path = Self::maker_buy_data_dir_path(&pubkey_string);
+            let maker_buy_dir_path = trader_dir_path.as_ref().join(MAKER_BUY_DIR_STR);
             tokio::fs::create_dir_all(&maker_buy_dir_path).await?;
             let buy_makers =
                 Self::restore_buy_makers(n3xb_makers, purse_accessor, &maker_buy_dir_path).await?;
 
-            let maker_sell_dir_path = Self::maker_sell_data_dir_path(&pubkey_string);
+            let maker_sell_dir_path = trader_dir_path.as_ref().join(MAKER_SELL_DIR_STR);
             tokio::fs::create_dir_all(&maker_sell_dir_path).await?;
             let sell_makers =
                 Self::restore_sell_makers(n3xb_makers, purse_accessor, &maker_sell_dir_path)
                     .await?;
 
-            let taker_buy_dir_path = Self::taker_buy_data_dir_path(&pubkey_string);
+            let taker_buy_dir_path = trader_dir_path.as_ref().join(TAKER_BUY_DIR_STR);
             tokio::fs::create_dir_all(&taker_buy_dir_path).await?;
             let buy_takers =
                 Self::restore_buy_takers(n3xb_takers, purse_accessor, &taker_buy_dir_path).await?;
 
-            let taker_sell_dir_path = Self::taker_sell_data_dir_path(&pubkey_string);
+            let taker_sell_dir_path = trader_dir_path.as_ref().join(TAKER_SELL_DIR_STR);
             tokio::fs::create_dir_all(&taker_sell_dir_path).await?;
             let sell_takers =
                 Self::restore_sell_takers(n3xb_takers, purse_accessor, &taker_sell_dir_path)
@@ -201,26 +220,6 @@ impl FatCrabTrader {
                 (HashMap::new(), HashMap::new())
             }
         }
-    }
-
-    fn purse_data_dir_path(identifier: impl AsRef<str>) -> String {
-        format!("{}/{}/purse/", DATA_DIR_PATH_STR, identifier.as_ref())
-    }
-
-    fn maker_buy_data_dir_path(identifier: impl AsRef<str>) -> String {
-        format!("{}/{}/makers/buy/", DATA_DIR_PATH_STR, identifier.as_ref())
-    }
-
-    fn maker_sell_data_dir_path(identifier: impl AsRef<str>) -> String {
-        format!("{}/{}/makers/sell/", DATA_DIR_PATH_STR, identifier.as_ref())
-    }
-
-    fn taker_buy_data_dir_path(identifier: impl AsRef<str>) -> String {
-        format!("{}/{}/takers/buy/", DATA_DIR_PATH_STR, identifier.as_ref())
-    }
-
-    fn taker_sell_data_dir_path(identifier: impl AsRef<str>) -> String {
-        format!("{}/{}/takers/sell/", DATA_DIR_PATH_STR, identifier.as_ref())
     }
 
     async fn restore_buy_makers(
@@ -492,7 +491,6 @@ impl FatCrabTrader {
         assert_eq!(order.order_type, FatCrabOrderType::Buy);
 
         let n3xb_maker = self.n3xb_manager.new_maker(order.clone().into()).await;
-        let pubkey = self.n3xb_manager.pubkey().await;
         let trade_uuid = order.trade_uuid.clone();
 
         let maker = FatCrabMaker::<MakerBuy>::new(
@@ -500,7 +498,7 @@ impl FatCrabTrader {
             fatcrab_rx_addr,
             n3xb_maker,
             self.purse.new_accessor(),
-            Self::maker_buy_data_dir_path(pubkey.to_string()),
+            self.trader_dir_path.join(MAKER_BUY_DIR_STR),
         )
         .await;
         let maker_accessor = maker.new_accessor();
@@ -519,14 +517,13 @@ impl FatCrabTrader {
         assert_eq!(order.order_type, FatCrabOrderType::Sell);
 
         let n3xb_maker = self.n3xb_manager.new_maker(order.clone().into()).await;
-        let pubkey = self.n3xb_manager.pubkey().await;
         let trade_uuid = order.trade_uuid.clone();
 
         let maker = FatCrabMaker::<MakerSell>::new(
             order,
             n3xb_maker,
             self.purse.new_accessor(),
-            Self::maker_sell_data_dir_path(pubkey.to_string()),
+            self.trader_dir_path.join(MAKER_SELL_DIR_STR),
         )
         .await;
         let maker_accessor = maker.new_accessor();
@@ -603,14 +600,13 @@ impl FatCrabTrader {
             .await
             .unwrap();
         n3xb_taker.take_order().await.unwrap();
-        let pubkey = self.n3xb_manager.pubkey().await;
         let trade_uuid = order_envelope.order.trade_uuid.clone();
 
         let taker = FatCrabTaker::<TakerBuy>::new(
             order_envelope,
             n3xb_taker,
             self.purse.new_accessor(),
-            Self::taker_buy_data_dir_path(pubkey.to_string()),
+            self.trader_dir_path.join(TAKER_BUY_DIR_STR),
         )
         .await;
         let taker_accessor = taker.new_accessor();
@@ -641,7 +637,6 @@ impl FatCrabTrader {
             .await
             .unwrap();
         n3xb_taker.take_order().await.unwrap();
-        let pubkey = self.n3xb_manager.pubkey().await;
         let trade_uuid = order_envelope.order.trade_uuid.clone();
 
         let taker = FatCrabTaker::<TakerSell>::new(
@@ -649,7 +644,7 @@ impl FatCrabTrader {
             fatcrab_rx_addr,
             n3xb_taker,
             self.purse.new_accessor(),
-            Self::taker_sell_data_dir_path(pubkey.to_string()),
+            self.trader_dir_path.join(TAKER_SELL_DIR_STR),
         )
         .await;
         let taker_accessor = taker.new_accessor();

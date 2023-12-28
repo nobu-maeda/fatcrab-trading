@@ -52,10 +52,10 @@ mod test {
             auth: node.auth(),
             network: node.network(),
         };
-        let trader_m = FatCrabTrader::new(info.clone()).await;
+        let trader_m = FatCrabTrader::new(info.clone(), "").await;
 
         // Taker - Create Fatcrab Trader for Taker
-        let trader_t = FatCrabTrader::new(info).await;
+        let trader_t = FatCrabTrader::new(info, "").await;
 
         // Add Relays
         let mut relay_addrs: Vec<(Url, Option<SocketAddr>)> = Vec::new();
