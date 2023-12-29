@@ -63,6 +63,15 @@ impl PurseAccess {
         rsp_rx.await.unwrap()
     }
 
+    pub(crate) async fn get_allocated_amount(&self) -> Result<u64, FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel();
+        self.tx
+            .send(PurseRequest::GetAllocatedAmount { rsp_tx })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
     pub(crate) async fn allocate_funds(&self, sats: u64) -> Result<Uuid, FatCrabError> {
         let (rsp_tx, rsp_rx) = oneshot::channel();
         self.tx
@@ -188,6 +197,9 @@ enum PurseRequest {
         rsp_tx: oneshot::Sender<Result<Address, FatCrabError>>,
     },
     GetSpendableBalance {
+        rsp_tx: oneshot::Sender<Result<u64, FatCrabError>>,
+    },
+    GetAllocatedAmount {
         rsp_tx: oneshot::Sender<Result<u64, FatCrabError>>,
     },
     AllocateFunds {
@@ -343,6 +355,9 @@ where
                             PurseRequest::GetSpendableBalance { rsp_tx } => {
                                 self.get_spendable_balance(rsp_tx);
                             }
+                            PurseRequest::GetAllocatedAmount { rsp_tx } => {
+                                self.get_allocated_amount(rsp_tx);
+                            }
                             PurseRequest::AllocateFunds { sats, rsp_tx } => {
                                 self.allocate_funds(sats, rsp_tx);
                             }
@@ -390,12 +405,8 @@ where
         .unwrap();
     }
 
-    fn total_allocated_sats(&self) -> u64 {
-        self.data.total_funds_allocated()
-    }
-
     fn actual_spendable_balance(&self) -> u64 {
-        self.wallet.get_balance().unwrap().confirmed - self.total_allocated_sats()
+        self.wallet.get_balance().unwrap().confirmed - self.data.total_funds_allocated()
     }
 
     pub(crate) fn get_spendable_balance(&self, rsp_tx: oneshot::Sender<Result<u64, FatCrabError>>) {
@@ -404,6 +415,10 @@ where
             Err(e) => rsp_tx.send(Err(e.into())),
         }
         .unwrap();
+    }
+
+    pub(crate) fn get_allocated_amount(&self, rsp_tx: oneshot::Sender<Result<u64, FatCrabError>>) {
+        rsp_tx.send(Ok(self.data.total_funds_allocated())).unwrap();
     }
 
     pub(crate) fn allocate_funds(
