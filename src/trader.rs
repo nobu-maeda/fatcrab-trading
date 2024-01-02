@@ -487,7 +487,7 @@ impl FatCrabTrader {
         Ok(())
     }
 
-    pub async fn make_buy_order(
+    pub async fn new_buy_maker(
         &self,
         order: &FatCrabOrder,
         fatcrab_rx_addr: impl Into<String>,
@@ -517,7 +517,7 @@ impl FatCrabTrader {
         maker_return_accessor
     }
 
-    pub async fn make_sell_order(&self, order: &FatCrabOrder) -> FatCrabMakerAccess<MakerSell> {
+    pub async fn new_sell_maker(&self, order: &FatCrabOrder) -> FatCrabMakerAccess<MakerSell> {
         assert_eq!(order.order_type, FatCrabOrderType::Sell);
 
         let n3xb_maker = self.n3xb_manager.new_maker(order.clone().into()).await;
@@ -589,7 +589,7 @@ impl FatCrabTrader {
         Ok(orders)
     }
 
-    pub async fn take_buy_order(
+    pub async fn new_buy_taker(
         &self,
         order_envelope: &FatCrabOrderEnvelope,
     ) -> FatCrabTakerAccess<TakerBuy> {
@@ -603,7 +603,6 @@ impl FatCrabTrader {
             )
             .await
             .unwrap();
-        n3xb_taker.take_order().await.unwrap();
         let trade_uuid = order_envelope.order.trade_uuid.clone();
 
         let taker = FatCrabTaker::<TakerBuy>::new(
@@ -625,7 +624,7 @@ impl FatCrabTrader {
         taker_return_accessor
     }
 
-    pub async fn take_sell_order(
+    pub async fn new_sell_taker(
         &self,
         order_envelope: &FatCrabOrderEnvelope,
         fatcrab_rx_addr: impl Into<String>,
@@ -640,7 +639,6 @@ impl FatCrabTrader {
             )
             .await
             .unwrap();
-        n3xb_taker.take_order().await.unwrap();
         let trade_uuid = order_envelope.order.trade_uuid.clone();
 
         let taker = FatCrabTaker::<TakerSell>::new(

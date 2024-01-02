@@ -98,12 +98,14 @@ mod test {
         };
 
         // Maker - Create Fatcrab Maker
-        let maker = trader_m.make_sell_order(&order).await;
+        let maker = trader_m.new_sell_maker(&order).await;
 
         // Maker Create channels & register Notif Tx
         let (maker_notif_tx, mut maker_notif_rx) =
             tokio::sync::mpsc::channel::<FatCrabMakerNotif>(5);
         maker.register_notif_tx(maker_notif_tx).await.unwrap();
+
+        maker.post_new_order().await.unwrap();
 
         // Taker - Query Fatcrab Trade Order
         let orders = trader_t
@@ -121,12 +123,14 @@ mod test {
         // Taker - Create Fatcrab Take Trader & Take Trade Order
         let taker_receive_fatcrab_addr = Uuid::new_v4().to_string();
         let taker = trader_t
-            .take_sell_order(&orders[0], taker_receive_fatcrab_addr)
+            .new_sell_taker(&orders[0], taker_receive_fatcrab_addr)
             .await;
 
         let (taker_notif_tx, mut taker_notif_rx) =
             tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
         taker.register_notif_tx(taker_notif_tx).await.unwrap();
+
+        taker.take_order().await.unwrap();
 
         // Maker - Wait for Fatcrab Trader Order to be taken
         let maker_notif = maker_notif_rx.recv().await.unwrap();

@@ -72,6 +72,15 @@ impl FatCrabTakerAccess<TakerBuy> {
 impl FatCrabTakerAccess<TakerSell> {}
 
 impl<OrderType> FatCrabTakerAccess<OrderType> {
+    pub async fn take_order(&self) -> Result<(), FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
+        self.tx
+            .send(FatCrabTakerRequest::TakeOrder { rsp_tx })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
     pub async fn trade_complete(&self) -> Result<(), FatCrabError> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
         self.tx
@@ -237,6 +246,9 @@ impl FatCrabTaker<TakerSell> {
 }
 
 enum FatCrabTakerRequest {
+    TakeOrder {
+        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
+    },
     NotifyPeer {
         txid: String,
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
@@ -350,6 +362,9 @@ impl FatCrabTakerActor {
             select! {
                 Some(request) = self.rx.recv() => {
                     match request {
+                        FatCrabTakerRequest::TakeOrder { rsp_tx } => {
+                            self.take_order(rsp_tx).await;
+                        }
                         FatCrabTakerRequest::NotifyPeer { txid, rsp_tx } => {
                             match self.inner {
                                 FatCrabTakerInnerActor::Buy(ref buy_actor) => {
@@ -408,6 +423,14 @@ impl FatCrabTakerActor {
                     }
                 },
             }
+        }
+    }
+
+    async fn take_order(&self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+        if let Some(error) = self.n3xb_taker.take_order().await.err() {
+            rsp_tx.send(Err(error.into())).unwrap();
+        } else {
+            rsp_tx.send(Ok(())).unwrap();
         }
     }
 

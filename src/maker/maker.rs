@@ -81,6 +81,15 @@ impl FatCrabMakerAccess<MakerSell> {
 }
 
 impl<OrderType> FatCrabMakerAccess<OrderType> {
+    pub async fn post_new_order(&self) -> Result<(), FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
+        self.tx
+            .send(FatCrabMakerRequest::PostNewOrder { rsp_tx })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
     pub async fn trade_response(
         &self,
         trade_rsp_type: FatCrabTradeRspType,
@@ -256,6 +265,9 @@ impl FatCrabMaker<MakerSell> {
 }
 
 enum FatCrabMakerRequest {
+    PostNewOrder {
+        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
+    },
     TradeResponse {
         trade_rsp_type: FatCrabTradeRspType,
         offer_envelope: FatCrabOfferEnvelope,
@@ -297,8 +309,6 @@ impl FatCrabMakerActor {
         purse: PurseAccess,
         dir_path: impl AsRef<Path>,
     ) -> Self {
-        n3xb_maker.post_new_order().await.unwrap();
-
         let inner = match order.order_type {
             FatCrabOrderType::Buy => {
                 let buy_actor = FatCrabMakerBuyActor::new(
@@ -375,6 +385,9 @@ impl FatCrabMakerActor {
             select! {
                 Some(request) = self.rx.recv() => {
                     match request {
+                        FatCrabMakerRequest::PostNewOrder { rsp_tx } => {
+                            self.post_new_order(rsp_tx).await;
+                        },
                         FatCrabMakerRequest::TradeResponse { trade_rsp_type, offer_envelope, rsp_tx } => {
                             match self.inner {
                                 FatCrabMakerInnerActor::Buy(ref buy_actor) => {
@@ -441,6 +454,14 @@ impl FatCrabMakerActor {
                     }
                 },
             }
+        }
+    }
+
+    async fn post_new_order(&mut self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+        if let Some(error) = self.n3xb_maker.post_new_order().await.err() {
+            rsp_tx.send(Err(error.into())).unwrap();
+        } else {
+            rsp_tx.send(Ok(())).unwrap();
         }
     }
 
