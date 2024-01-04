@@ -665,22 +665,12 @@ impl FatCrabTrader {
         taker_return_accessor
     }
 
-    pub async fn get_makers(&self) -> Vec<FatCrabMakerAccessEnum> {
-        let maker_accessors = self.maker_accessors.read().await;
-        maker_accessors
-            .values()
-            .into_iter()
-            .map(|v| v.clone())
-            .collect()
+    pub async fn get_makers(&self) -> HashMap<Uuid, FatCrabMakerAccessEnum> {
+        self.maker_accessors.read().await.clone()
     }
 
-    pub async fn get_takers(&self) -> Vec<FatCrabTakerAccessEnum> {
-        let taker_accessors = self.taker_accessors.read().await;
-        taker_accessors
-            .values()
-            .into_iter()
-            .map(|v| v.clone())
-            .collect()
+    pub async fn get_takers(&self) -> HashMap<Uuid, FatCrabTakerAccessEnum> {
+        self.taker_accessors.read().await.clone()
     }
 
     pub async fn shutdown(self) -> Result<(), JoinError> {
