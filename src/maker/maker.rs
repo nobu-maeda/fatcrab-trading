@@ -29,9 +29,13 @@ pub enum FatCrabMakerNotif {
 }
 
 // Just for purpose of typing the Maker
+#[derive(Clone)]
 pub struct MakerBuy {}
+
+#[derive(Clone)]
 pub struct MakerSell {}
 
+#[derive(Clone)]
 pub enum FatCrabMakerAccessEnum {
     Buy(FatCrabMakerAccess<MakerBuy>),
     Sell(FatCrabMakerAccess<MakerSell>),

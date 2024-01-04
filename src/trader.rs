@@ -487,6 +487,10 @@ impl FatCrabTrader {
         Ok(())
     }
 
+    pub async fn get_relays(&self) -> Vec<Url> {
+        self.n3xb_manager.get_relays().await
+    }
+
     pub async fn new_buy_maker(
         &self,
         order: &FatCrabOrder,
@@ -659,6 +663,24 @@ impl FatCrabTrader {
         taker_accessors.insert(trade_uuid, FatCrabTakerAccessEnum::Sell(taker_accessor));
 
         taker_return_accessor
+    }
+
+    pub async fn get_makers(&self) -> Vec<FatCrabMakerAccessEnum> {
+        let maker_accessors = self.maker_accessors.read().await;
+        maker_accessors
+            .values()
+            .into_iter()
+            .map(|v| v.clone())
+            .collect()
+    }
+
+    pub async fn get_takers(&self) -> Vec<FatCrabTakerAccessEnum> {
+        let taker_accessors = self.taker_accessors.read().await;
+        taker_accessors
+            .values()
+            .into_iter()
+            .map(|v| v.clone())
+            .collect()
     }
 
     pub async fn shutdown(self) -> Result<(), JoinError> {

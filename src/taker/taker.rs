@@ -30,10 +30,14 @@ pub enum FatCrabTakerNotif {
     Peer(FatCrabPeerEnvelope),
 }
 
+#[derive(Clone)]
 // Just for purpose of typing the Taker
 pub struct TakerBuy {} //  Means Taker is taking a Buy Order to Sell
+
+#[derive(Clone)]
 pub struct TakerSell {} // Means Tkaer is taking a Sell Order to Buy
 
+#[derive(Clone)]
 pub enum FatCrabTakerAccessEnum {
     Buy(FatCrabTakerAccess<TakerBuy>),
     Sell(FatCrabTakerAccess<TakerSell>),
