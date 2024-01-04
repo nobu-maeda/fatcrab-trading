@@ -54,6 +54,7 @@ impl FatCrabMakerBuyData {
         let store: Arc<RwLock<FatCrabMakerBuyDataStore>> = Arc::new(RwLock::new(store));
         let generic_store: Arc<RwLock<dyn SerdeGenericTrait + 'static>> = store.clone();
         let persister = Persister::new(generic_store, data_path);
+        persister.queue();
 
         Self {
             store,
