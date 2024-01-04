@@ -116,6 +116,15 @@ impl<OrderType> FatCrabMakerAccess<OrderType> {
         rsp_rx.await.unwrap()
     }
 
+    pub async fn shutdown(&self) -> Result<(), FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
+        self.tx
+            .send(FatCrabMakerRequest::Shutdown { rsp_tx })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
     pub async fn register_notif_tx(
         &self,
         tx: mpsc::Sender<FatCrabMakerNotif>,
@@ -290,6 +299,9 @@ enum FatCrabMakerRequest {
     UnregisterNotifTx {
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
     },
+    Shutdown {
+        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
+    },
 }
 
 struct FatCrabMakerActor {
@@ -429,6 +441,10 @@ impl FatCrabMakerActor {
                             }
                             return;
                         },
+                        FatCrabMakerRequest::Shutdown { rsp_tx } => {
+                            self.shutdown(rsp_tx).await;
+                            return;
+                        },
                         FatCrabMakerRequest::RegisterNotifTx { tx, rsp_tx } => {
                             self.register_notif_tx(tx, rsp_tx).await;
                         },
@@ -510,6 +526,26 @@ impl FatCrabMakerActor {
         }
         self.set_notif_tx(None);
         rsp_tx.send(result).unwrap();
+    }
+
+    async fn shutdown(self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+        match self.inner {
+            FatCrabMakerInnerActor::Buy(buy_actor) => {
+                buy_actor.data.terminate().await;
+            }
+            FatCrabMakerInnerActor::Sell(sell_actor) => {
+                sell_actor.data.terminate().await;
+            }
+        }
+
+        match self.n3xb_maker.shutdown().await {
+            Ok(_) => {
+                rsp_tx.send(Ok(())).unwrap();
+            }
+            Err(error) => {
+                rsp_tx.send(Err(error.into())).unwrap();
+            }
+        }
     }
 
     async fn handle_offer_notif(&self, offer_envelope: OfferEnvelope) {

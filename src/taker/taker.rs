@@ -90,6 +90,15 @@ impl<OrderType> FatCrabTakerAccess<OrderType> {
         rsp_rx.await.unwrap()
     }
 
+    pub async fn shutdown(&self) -> Result<(), FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
+        self.tx
+            .send(FatCrabTakerRequest::Shutdown { rsp_tx })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
     pub async fn register_notif_tx(
         &self,
         tx: mpsc::Sender<FatCrabTakerNotif>,
@@ -259,6 +268,9 @@ enum FatCrabTakerRequest {
     TradeComplete {
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
     },
+    Shutdown {
+        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
+    },
     RegisterNotifTx {
         tx: mpsc::Sender<FatCrabTakerNotif>,
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
@@ -394,7 +406,11 @@ impl FatCrabTakerActor {
                                     sell_actor.trade_complete(rsp_tx).await;
                                 }
                             }
-                            return;
+                            break;
+                        }
+                        FatCrabTakerRequest::Shutdown { rsp_tx } => {
+                            self.shutdown(rsp_tx).await;
+                            break;
                         }
                         FatCrabTakerRequest::RegisterNotifTx { tx, rsp_tx } => {
                             self.register_notif_tx(tx, rsp_tx).await;
@@ -431,6 +447,26 @@ impl FatCrabTakerActor {
             rsp_tx.send(Err(error.into())).unwrap();
         } else {
             rsp_tx.send(Ok(())).unwrap();
+        }
+    }
+
+    async fn shutdown(self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+        match self.inner {
+            FatCrabTakerInnerActor::Buy(buy_actor) => {
+                buy_actor.data.terminate().await;
+            }
+            FatCrabTakerInnerActor::Sell(sell_actor) => {
+                sell_actor.data.terminate().await;
+            }
+        }
+
+        match self.n3xb_taker.shutdown().await {
+            Ok(_) => {
+                rsp_tx.send(Ok(())).unwrap();
+            }
+            Err(error) => {
+                rsp_tx.send(Err(error.into())).unwrap();
+            }
         }
     }
 
