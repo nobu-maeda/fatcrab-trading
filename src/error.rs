@@ -26,6 +26,12 @@ pub enum FatCrabError {
     SerdesJson {
         error: serde_json::Error,
     },
+    MpscSend {
+        description: String,
+    },
+    OneshotRecv {
+        error: tokio::sync::oneshot::error::RecvError,
+    },
 }
 
 impl Error for FatCrabError {}
@@ -44,6 +50,12 @@ impl Display for FatCrabError {
             FatCrabError::Io { error } => format!("FatCrab-Error | io - {}", error),
             FatCrabError::JoinError { error } => format!("FatCrab-Error | join - {}", error),
             FatCrabError::SerdesJson { error } => format!("FatCrab-Error | json - {}", error),
+            FatCrabError::MpscSend { description } => {
+                format!("FatCrab-Error | mpsc-send - {}", description)
+            }
+            FatCrabError::OneshotRecv { error } => {
+                format!("FatCrab-Error | oneshot-recv - {}", error)
+            }
         };
         write!(f, "{}", error_string)
     }
@@ -82,5 +94,19 @@ impl From<tokio::task::JoinError> for FatCrabError {
 impl From<serde_json::Error> for FatCrabError {
     fn from(e: serde_json::Error) -> FatCrabError {
         FatCrabError::SerdesJson { error: e }
+    }
+}
+
+impl<T> From<tokio::sync::mpsc::error::SendError<T>> for FatCrabError {
+    fn from(e: tokio::sync::mpsc::error::SendError<T>) -> FatCrabError {
+        FatCrabError::MpscSend {
+            description: e.to_string(),
+        }
+    }
+}
+
+impl From<tokio::sync::oneshot::error::RecvError> for FatCrabError {
+    fn from(e: tokio::sync::oneshot::error::RecvError) -> FatCrabError {
+        FatCrabError::OneshotRecv { error: e }
     }
 }

@@ -678,6 +678,21 @@ impl FatCrabTrader {
             warn!("Trader error shutting down Purse: {}", error);
         }
         self.purse.task_handle.await?;
+
+        let maker_accessors = self.maker_accessors.read().await;
+        for (_uuid, maker_accessor) in maker_accessors.iter() {
+            if let Some(error) = maker_accessor.shutdown().await.err() {
+                warn!("Trader error shutting down Maker: {}", error);
+            }
+        }
+
+        let taker_accessors = self.taker_accessors.read().await;
+        for (_uuid, taker_accessor) in taker_accessors.iter() {
+            if let Some(error) = taker_accessor.shutdown().await.err() {
+                warn!("Trader error shutting down Taker: {}", error);
+            }
+        }
+
         let mut makers = self.makers.write().await;
         for (_uuid, maker) in makers.drain() {
             maker.await_task_handle().await?;

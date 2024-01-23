@@ -41,6 +41,15 @@ pub enum FatCrabMakerAccessEnum {
     Sell(FatCrabMakerAccess<MakerSell>),
 }
 
+impl FatCrabMakerAccessEnum {
+    pub async fn shutdown(&self) -> Result<(), FatCrabError> {
+        match self {
+            FatCrabMakerAccessEnum::Buy(access) => access.shutdown().await,
+            FatCrabMakerAccessEnum::Sell(access) => access.shutdown().await,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct FatCrabMakerAccess<OrderType = MakerBuy> {
     tx: mpsc::Sender<FatCrabMakerRequest>,
@@ -134,9 +143,8 @@ impl<OrderType> FatCrabMakerAccess<OrderType> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
         self.tx
             .send(FatCrabMakerRequest::Shutdown { rsp_tx })
-            .await
-            .unwrap();
-        rsp_rx.await.unwrap()
+            .await?;
+        rsp_rx.await?
     }
 
     pub async fn register_notif_tx(
