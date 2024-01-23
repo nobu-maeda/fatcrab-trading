@@ -72,6 +72,16 @@ impl FatCrabTakerAccess<TakerBuy> {
         rsp_rx.await.unwrap()
     }
 
+    pub async fn query_trade_rsp(&self) -> Result<Option<FatCrabTradeRspEnvelope>, FatCrabError> {
+        let (rsp_tx, rsp_rx) =
+            oneshot::channel::<Result<Option<FatCrabTradeRspEnvelope>, FatCrabError>>();
+        self.tx
+            .send(FatCrabTakerRequest::QueryTradeRsp { rsp_tx })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
     pub async fn check_btc_tx_confirmation(&self) -> Result<u32, FatCrabError> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<u32, FatCrabError>>();
         self.tx
@@ -270,6 +280,9 @@ enum FatCrabTakerRequest {
     TakeOrder {
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
     },
+    QueryTradeRsp {
+        rsp_tx: oneshot::Sender<Result<Option<FatCrabTradeRspEnvelope>, FatCrabError>>,
+    },
     NotifyPeer {
         txid: String,
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
@@ -388,6 +401,16 @@ impl FatCrabTakerActor {
                     match request {
                         FatCrabTakerRequest::TakeOrder { rsp_tx } => {
                             self.take_order(rsp_tx).await;
+                        }
+                        FatCrabTakerRequest::QueryTradeRsp { rsp_tx } => {
+                            match self.inner {
+                                FatCrabTakerInnerActor::Buy(ref buy_actor) => {
+                                    buy_actor.query_trade_rsp(rsp_tx).await;
+                                }
+                                FatCrabTakerInnerActor::Sell(ref sell_actor) => {
+                                    sell_actor.query_trade_rsp(rsp_tx).await;
+                                }
+                            }
                         }
                         FatCrabTakerRequest::NotifyPeer { txid, rsp_tx } => {
                             match self.inner {
@@ -646,6 +669,9 @@ impl FatCrabTakerBuyActor {
                 _envelope: n3xb_trade_rsp_envelope.clone(),
                 trade_rsp,
             };
+            self.data
+                .set_trade_rsp_envelope(fatcrab_trade_rsp_envelope.clone())
+                .await;
             notif_tx
                 .send(FatCrabTakerNotif::TradeRsp(fatcrab_trade_rsp_envelope))
                 .await
@@ -656,6 +682,14 @@ impl FatCrabTakerBuyActor {
                 self.trade_uuid
             );
         }
+    }
+
+    async fn query_trade_rsp(
+        &self,
+        rsp_tx: oneshot::Sender<Result<Option<FatCrabTradeRspEnvelope>, FatCrabError>>,
+    ) {
+        let trade_rsp = self.data.trade_rsp_envelope().await;
+        rsp_tx.send(Ok(trade_rsp)).unwrap();
     }
 
     async fn notify_peer(&self, txid: String, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
@@ -866,6 +900,20 @@ impl FatCrabTakerSellActor {
 
     async fn handle_peer_notif(&mut self, _fatcrab_peer_message: &FatCrabPeerMessage) {
         // Nothing to do here
+    }
+
+    async fn query_trade_rsp(
+        &self,
+        rsp_tx: oneshot::Sender<Result<Option<FatCrabTradeRspEnvelope>, FatCrabError>>,
+    ) {
+        rsp_tx
+            .send(Err(FatCrabError::Simple {
+                description: format!(
+                    "Taker w/ TradeUUID {} is a Seller, does not retain Trade Response for query",
+                    self.trade_uuid
+                ),
+            }))
+            .unwrap();
     }
 
     async fn notify_peer(&self, _txid: String, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {

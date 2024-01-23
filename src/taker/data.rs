@@ -9,6 +9,7 @@ use crate::{
     common::{parse_address, SerdeGenericTrait},
     error::FatCrabError,
     persist::tokio::Persister,
+    trade_rsp::FatCrabTradeRspEnvelope,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -16,6 +17,7 @@ struct FatCrabTakerBuyDataStore {
     trade_uuid: Uuid,
     btc_rx_addr: String,
     peer_btc_txid: Option<Txid>,
+    trade_rsp_envelope: Option<FatCrabTradeRspEnvelope>,
     trade_completed: bool,
 }
 
@@ -45,6 +47,7 @@ impl FatCrabTakerBuyData {
             trade_uuid,
             btc_rx_addr: btc_rx_addr.to_string(),
             peer_btc_txid: None,
+            trade_rsp_envelope: None,
             trade_completed: false,
         };
 
@@ -89,12 +92,21 @@ impl FatCrabTakerBuyData {
         self.store.read().await.peer_btc_txid
     }
 
+    pub(crate) async fn trade_rsp_envelope(&self) -> Option<FatCrabTradeRspEnvelope> {
+        self.store.read().await.trade_rsp_envelope.clone()
+    }
+
     pub(crate) async fn trade_completed(&self) -> bool {
         self.store.read().await.trade_completed
     }
 
     pub(crate) async fn set_peer_btc_txid(&self, txid: Txid) {
         self.store.write().await.peer_btc_txid = Some(txid);
+        self.persister.queue();
+    }
+
+    pub(crate) async fn set_trade_rsp_envelope(&self, trade_rsp_envelope: FatCrabTradeRspEnvelope) {
+        self.store.write().await.trade_rsp_envelope = Some(trade_rsp_envelope);
         self.persister.queue();
     }
 
