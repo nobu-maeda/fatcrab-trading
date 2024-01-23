@@ -22,7 +22,7 @@ impl SerdeGenericTrait for FatCrabTakeOrderSpecifics {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FatCrabOfferEnvelope {
     pub(crate) envelope: OfferEnvelope,
 }

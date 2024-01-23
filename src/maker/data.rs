@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::{
     common::{parse_address, SerdeGenericTrait},
     error::FatCrabError,
+    offer::FatCrabOfferEnvelope,
     persist::tokio::Persister,
 };
 
@@ -17,6 +18,7 @@ struct FatCrabMakerBuyDataStore {
     fatcrab_rx_addr: String,
     btc_funds_id: Uuid,
     peer_btc_addr: Option<String>,
+    offer_envelopes: Vec<FatCrabOfferEnvelope>,
     trade_completed: bool,
 }
 
@@ -48,6 +50,7 @@ impl FatCrabMakerBuyData {
             fatcrab_rx_addr: fatcrab_rx_addr.as_ref().to_owned(),
             btc_funds_id,
             peer_btc_addr: None,
+            offer_envelopes: Vec::new(),
             trade_completed: false,
         };
 
@@ -100,12 +103,21 @@ impl FatCrabMakerBuyData {
         }
     }
 
+    pub(crate) async fn offer_envelopes(&self) -> Vec<FatCrabOfferEnvelope> {
+        self.store.read().await.offer_envelopes.to_owned()
+    }
+
     pub(crate) async fn trade_completed(&self) -> bool {
         self.store.read().await.trade_completed
     }
 
     pub(crate) async fn set_peer_btc_addr(&self, addr: Address) {
         self.store.write().await.peer_btc_addr = Some(addr.to_string());
+        self.persister.queue();
+    }
+
+    pub(crate) async fn insert_offer_envelope(&self, envelope: FatCrabOfferEnvelope) {
+        self.store.write().await.offer_envelopes.push(envelope);
         self.persister.queue();
     }
 
@@ -124,6 +136,7 @@ struct FatCrabMakerSellDataStore {
     trade_uuid: Uuid,
     btc_rx_addr: String,
     peer_btc_txid: Option<Txid>,
+    offer_envelopes: Vec<FatCrabOfferEnvelope>,
     trade_completed: bool,
 }
 
@@ -153,6 +166,7 @@ impl FatCrabMakerSellData {
             trade_uuid,
             btc_rx_addr: btc_rx_addr.to_string(),
             peer_btc_txid: None,
+            offer_envelopes: Vec::new(),
             trade_completed: false,
         };
 
@@ -196,12 +210,21 @@ impl FatCrabMakerSellData {
         self.store.read().await.peer_btc_txid
     }
 
+    pub(crate) async fn offer_envelopes(&self) -> Vec<FatCrabOfferEnvelope> {
+        self.store.read().await.offer_envelopes.to_owned()
+    }
+
     pub(crate) async fn trade_completed(&self) -> bool {
         self.store.read().await.trade_completed
     }
 
     pub(crate) async fn set_peer_btc_txid(&self, txid: Txid) {
         self.store.write().await.peer_btc_txid = Some(txid);
+        self.persister.queue();
+    }
+
+    pub(crate) async fn insert_offer_envelope(&self, envelope: FatCrabOfferEnvelope) {
+        self.store.write().await.offer_envelopes.push(envelope);
         self.persister.queue();
     }
 
