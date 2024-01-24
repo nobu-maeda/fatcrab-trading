@@ -113,6 +113,16 @@ impl<OrderType> FatCrabMakerAccess<OrderType> {
         rsp_rx.await.unwrap()
     }
 
+    pub async fn query_peer_msg(&self) -> Result<Option<FatCrabPeerEnvelope>, FatCrabError> {
+        let (rsp_tx, rsp_rx) =
+            oneshot::channel::<Result<Option<FatCrabPeerEnvelope>, FatCrabError>>();
+        self.tx
+            .send(FatCrabMakerRequest::QueryPeerMsg { rsp_tx })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
     pub async fn trade_response(
         &self,
         trade_rsp_type: FatCrabTradeRspType,
@@ -302,6 +312,9 @@ enum FatCrabMakerRequest {
     QueryOffers {
         rsp_tx: oneshot::Sender<Result<Vec<FatCrabOfferEnvelope>, FatCrabError>>,
     },
+    QueryPeerMsg {
+        rsp_tx: oneshot::Sender<Result<Option<FatCrabPeerEnvelope>, FatCrabError>>,
+    },
     TradeResponse {
         trade_rsp_type: FatCrabTradeRspType,
         offer_envelope: FatCrabOfferEnvelope,
@@ -428,6 +441,9 @@ impl FatCrabMakerActor {
                         FatCrabMakerRequest::QueryOffers { rsp_tx } => {
                             self.query_offers(rsp_tx).await;
                         },
+                        FatCrabMakerRequest::QueryPeerMsg { rsp_tx } => {
+                            self.query_peer_msg(rsp_tx).await;
+                        },
                         FatCrabMakerRequest::TradeResponse { trade_rsp_type, offer_envelope, rsp_tx } => {
                             match self.inner {
                                 FatCrabMakerInnerActor::Buy(ref buy_actor) => {
@@ -518,6 +534,17 @@ impl FatCrabMakerActor {
             FatCrabMakerInnerActor::Sell(ref sell_actor) => sell_actor.data.offer_envelopes().await,
         };
         rsp_tx.send(Ok(offer_envelopes)).unwrap();
+    }
+
+    async fn query_peer_msg(
+        &self,
+        rsp_tx: oneshot::Sender<Result<Option<FatCrabPeerEnvelope>, FatCrabError>>,
+    ) {
+        let peer_envelope = match self.inner {
+            FatCrabMakerInnerActor::Buy(ref buy_actor) => buy_actor.data.peer_envelope().await,
+            FatCrabMakerInnerActor::Sell(ref sell_actor) => sell_actor.data.peer_envelope().await,
+        };
+        rsp_tx.send(Ok(peer_envelope)).unwrap();
     }
 
     fn set_notif_tx(&mut self, tx: Option<mpsc::Sender<FatCrabMakerNotif>>) {
@@ -639,25 +666,33 @@ impl FatCrabMakerActor {
             .unwrap()
             .clone();
 
+        let fatcrab_peer_envelope = FatCrabPeerEnvelope {
+            _envelope: peer_envelope,
+            message: fatcrab_peer_message.clone(),
+        };
+
         match self.inner {
             FatCrabMakerInnerActor::Buy(ref mut buy_actor) => {
                 if buy_actor.handle_peer_notif(&fatcrab_peer_message).await {
                     return;
                 }
+                buy_actor
+                    .data
+                    .set_peer_envelope(fatcrab_peer_envelope.clone())
+                    .await;
             }
             FatCrabMakerInnerActor::Sell(ref mut sell_actor) => {
                 if sell_actor.handle_peer_notif(&fatcrab_peer_message).await {
                     return;
                 }
+                sell_actor
+                    .data
+                    .set_peer_envelope(fatcrab_peer_envelope.clone())
+                    .await;
             }
         }
 
         if let Some(notif_tx) = &self.notif_tx {
-            let fatcrab_peer_envelope = FatCrabPeerEnvelope {
-                _envelope: peer_envelope,
-                message: fatcrab_peer_message,
-            };
-
             notif_tx
                 .send(FatCrabMakerNotif::Peer(fatcrab_peer_envelope))
                 .await

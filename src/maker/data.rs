@@ -9,6 +9,7 @@ use crate::{
     common::{parse_address, SerdeGenericTrait},
     error::FatCrabError,
     offer::FatCrabOfferEnvelope,
+    peer::FatCrabPeerEnvelope,
     persist::tokio::Persister,
 };
 
@@ -19,6 +20,7 @@ struct FatCrabMakerBuyDataStore {
     btc_funds_id: Uuid,
     peer_btc_addr: Option<String>,
     offer_envelopes: Vec<FatCrabOfferEnvelope>,
+    peer_envelope: Option<FatCrabPeerEnvelope>,
     trade_completed: bool,
 }
 
@@ -51,6 +53,7 @@ impl FatCrabMakerBuyData {
             btc_funds_id,
             peer_btc_addr: None,
             offer_envelopes: Vec::new(),
+            peer_envelope: None,
             trade_completed: false,
         };
 
@@ -107,6 +110,10 @@ impl FatCrabMakerBuyData {
         self.store.read().await.offer_envelopes.to_owned()
     }
 
+    pub(crate) async fn peer_envelope(&self) -> Option<FatCrabPeerEnvelope> {
+        self.store.read().await.peer_envelope.to_owned()
+    }
+
     pub(crate) async fn trade_completed(&self) -> bool {
         self.store.read().await.trade_completed
     }
@@ -118,6 +125,11 @@ impl FatCrabMakerBuyData {
 
     pub(crate) async fn insert_offer_envelope(&self, envelope: FatCrabOfferEnvelope) {
         self.store.write().await.offer_envelopes.push(envelope);
+        self.persister.queue();
+    }
+
+    pub(crate) async fn set_peer_envelope(&self, envelope: FatCrabPeerEnvelope) {
+        self.store.write().await.peer_envelope = Some(envelope);
         self.persister.queue();
     }
 
@@ -137,6 +149,7 @@ struct FatCrabMakerSellDataStore {
     btc_rx_addr: String,
     peer_btc_txid: Option<Txid>,
     offer_envelopes: Vec<FatCrabOfferEnvelope>,
+    peer_envelope: Option<FatCrabPeerEnvelope>,
     trade_completed: bool,
 }
 
@@ -167,6 +180,7 @@ impl FatCrabMakerSellData {
             btc_rx_addr: btc_rx_addr.to_string(),
             peer_btc_txid: None,
             offer_envelopes: Vec::new(),
+            peer_envelope: None,
             trade_completed: false,
         };
 
@@ -214,6 +228,10 @@ impl FatCrabMakerSellData {
         self.store.read().await.offer_envelopes.to_owned()
     }
 
+    pub(crate) async fn peer_envelope(&self) -> Option<FatCrabPeerEnvelope> {
+        self.store.read().await.peer_envelope.to_owned()
+    }
+
     pub(crate) async fn trade_completed(&self) -> bool {
         self.store.read().await.trade_completed
     }
@@ -225,6 +243,11 @@ impl FatCrabMakerSellData {
 
     pub(crate) async fn insert_offer_envelope(&self, envelope: FatCrabOfferEnvelope) {
         self.store.write().await.offer_envelopes.push(envelope);
+        self.persister.queue();
+    }
+
+    pub(crate) async fn set_peer_envelope(&self, envelope: FatCrabPeerEnvelope) {
+        self.store.write().await.peer_envelope = Some(envelope);
         self.persister.queue();
     }
 

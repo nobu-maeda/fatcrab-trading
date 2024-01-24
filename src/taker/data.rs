@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::{
     common::{parse_address, SerdeGenericTrait},
     error::FatCrabError,
+    peer::FatCrabPeerEnvelope,
     persist::tokio::Persister,
     trade_rsp::FatCrabTradeRspEnvelope,
 };
@@ -18,6 +19,7 @@ struct FatCrabTakerBuyDataStore {
     btc_rx_addr: String,
     peer_btc_txid: Option<Txid>,
     trade_rsp_envelope: Option<FatCrabTradeRspEnvelope>,
+    peer_envelope: Option<FatCrabPeerEnvelope>,
     trade_completed: bool,
 }
 
@@ -48,6 +50,7 @@ impl FatCrabTakerBuyData {
             btc_rx_addr: btc_rx_addr.to_string(),
             peer_btc_txid: None,
             trade_rsp_envelope: None,
+            peer_envelope: None,
             trade_completed: false,
         };
 
@@ -96,6 +99,10 @@ impl FatCrabTakerBuyData {
         self.store.read().await.trade_rsp_envelope.clone()
     }
 
+    pub(crate) async fn peer_envelope(&self) -> Option<FatCrabPeerEnvelope> {
+        self.store.read().await.peer_envelope.clone()
+    }
+
     pub(crate) async fn trade_completed(&self) -> bool {
         self.store.read().await.trade_completed
     }
@@ -107,6 +114,11 @@ impl FatCrabTakerBuyData {
 
     pub(crate) async fn set_trade_rsp_envelope(&self, trade_rsp_envelope: FatCrabTradeRspEnvelope) {
         self.store.write().await.trade_rsp_envelope = Some(trade_rsp_envelope);
+        self.persister.queue();
+    }
+
+    pub(crate) async fn set_peer_envelope(&self, peer_envelope: FatCrabPeerEnvelope) {
+        self.store.write().await.peer_envelope = Some(peer_envelope);
         self.persister.queue();
     }
 
@@ -125,6 +137,7 @@ struct FatCrabTakerSellDataStore {
     trade_uuid: Uuid,
     fatcrab_rx_addr: String,
     btc_funds_id: Uuid,
+    peer_envelope: Option<FatCrabPeerEnvelope>,
     trade_completed: bool,
 }
 
@@ -153,6 +166,7 @@ impl FatCrabTakerSellData {
             trade_uuid,
             fatcrab_rx_addr: fatcrab_rx_addr.as_ref().to_owned(),
             btc_funds_id,
+            peer_envelope: None,
             trade_completed: false,
         };
 
@@ -188,8 +202,17 @@ impl FatCrabTakerSellData {
         self.store.read().await.btc_funds_id
     }
 
+    pub(crate) async fn peer_envelope(&self) -> Option<FatCrabPeerEnvelope> {
+        self.store.read().await.peer_envelope.clone()
+    }
+
     pub(crate) async fn trade_completed(&self) -> bool {
         self.store.read().await.trade_completed
+    }
+
+    pub(crate) async fn set_peer_envelope(&self, peer_envelope: FatCrabPeerEnvelope) {
+        self.store.write().await.peer_envelope = Some(peer_envelope);
+        self.persister.queue();
     }
 
     pub(crate) async fn set_trade_completed(&self) {
