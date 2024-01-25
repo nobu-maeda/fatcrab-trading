@@ -71,7 +71,7 @@ impl PurseData {
 
         let data = Self {
             store,
-            persister: Persister::new(generic_store, dir_path),
+            persister: Persister::new(generic_store, data_path),
         };
         Ok(data)
     }
@@ -110,7 +110,7 @@ impl PurseData {
         self.read_store().allocated_funds.get(uuid).copied()
     }
 
-    pub(crate) fn allocated_funds(&self, uuid: &Uuid, amount: u64, height: Option<u32>) {
+    pub(crate) fn allocate_funds(&self, uuid: &Uuid, amount: u64, height: Option<u32>) {
         {
             let mut store = self.write_store();
             store.allocated_funds.insert(uuid.to_owned(), amount);
