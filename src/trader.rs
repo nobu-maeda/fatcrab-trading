@@ -97,9 +97,10 @@ impl FatCrabTrader {
     }
 
     async fn restore(&self) -> Result<(), FatCrabError> {
-        // Reconnect to any relays restored first. If there's Maker & Takers to restore, then likely there's relays already restored and ready to connect.
-        // In a real scenario, there should be better handling to ensure the relays are in a desired state before Maker & Taker restoration.
-        self.n3xb_manager.connect_all_relays().await?;
+        // In a restore scenario, We really need to make sure notifications are subscirbed first.
+        // Otherwise missing notificaitons will immeidately be notified, which goes nowhere if
+        // notifications by the application layer is not already subscribed
+        // self.n3xb_manager.connect_all_relays().await?;
 
         let n3xb_makers = self.n3xb_manager.get_makers().await;
         let n3xb_takers = self.n3xb_manager.get_takers().await;
@@ -444,6 +445,11 @@ impl FatCrabTrader {
             Err(_) => return None,
         };
         Some((trade_uuid, FatCrabTakerEnum::Sell(taker)))
+    }
+
+    pub async fn reconnect(&self) -> Result<(), FatCrabError> {
+        self.n3xb_manager.connect_all_relays().await?;
+        Ok(())
     }
 
     pub async fn wallet_bip39_mnemonic(&self) -> Result<Mnemonic, FatCrabError> {
