@@ -437,7 +437,7 @@ where
 
         let funds_id = Uuid::new_v4();
         self.data
-            .allocated_funds(&funds_id, sats, self.blockchain.get_height().ok());
+            .allocate_funds(&funds_id, sats, self.blockchain.get_height().ok());
         rsp_tx.send(Ok(funds_id)).unwrap();
     }
 
