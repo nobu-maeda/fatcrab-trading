@@ -81,9 +81,9 @@ mod test {
             trader_t.shutdown().await.unwrap();
         }
 
-        // Fund Trader
+        // Fund Maker Trader
         {
-            println!("Fund Trader");
+            println!("Fund Maker Trader");
             let trader_m = FatCrabTrader::new_with_key(privkey_m, info.clone(), "").await;
             let trader_t = FatCrabTrader::new_with_key(privkey_t, info.clone(), "").await;
 
@@ -122,8 +122,8 @@ mod test {
             println!("New Maker");
             let trader_m = FatCrabTrader::new_with_key(privkey_m, info.clone(), "").await;
             trader_m.reconnect().await.unwrap();
-
             trader_m.wallet_blockchain_sync().await.unwrap();
+
             // Check wallet balance as expected
             assert_eq!(
                 trader_m.wallet_spendable_balance().await.unwrap(),
@@ -185,8 +185,6 @@ mod test {
             taker.shutdown().await.unwrap();
             trader_t.shutdown().await.unwrap();
         }
-
-        sleep(Duration::from_secs(2)).await;
 
         // Taker Order
         {
