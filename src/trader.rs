@@ -707,6 +707,8 @@ impl FatCrabTrader {
         for (_uuid, taker) in takers.drain() {
             taker.await_task_handle().await?;
         }
+
+        self.n3xb_manager.shutdown().await?;
         Ok(())
     }
 }
