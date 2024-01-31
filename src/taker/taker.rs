@@ -184,11 +184,11 @@ impl FatCrabTaker<TakerBuy> {
         n3xb_taker: TakerAccess,
         purse: PurseAccess,
         dir_path: impl AsRef<Path>,
-    ) -> Self {
+    ) -> Result<Self, FatCrabError> {
         assert_eq!(order_envelope.order.order_type, FatCrabOrderType::Buy);
         let (tx, rx) =
             mpsc::channel::<FatCrabTakerRequest>(FatCrabTaker::TAKE_TRADE_REQUEST_CHANNEL_SIZE);
-        let actor = FatCrabTakerActor::new(
+        let actor_result = FatCrabTakerActor::new(
             rx,
             order_envelope.to_owned(),
             None,
@@ -197,12 +197,23 @@ impl FatCrabTaker<TakerBuy> {
             dir_path,
         )
         .await;
+
+        let actor = match actor_result {
+            Ok(actor) => actor,
+            Err(error) => {
+                return Err(error);
+            }
+        };
+
         let task_handle = tokio::spawn(async move { actor.run().await });
-        Self {
+
+        let taker = Self {
             tx,
             task_handle,
             _order_type: PhantomData,
-        }
+        };
+
+        Ok(taker)
     }
 
     pub(crate) async fn restore(
@@ -239,11 +250,11 @@ impl FatCrabTaker<TakerSell> {
         n3xb_taker: TakerAccess,
         purse: PurseAccess,
         dir_path: impl AsRef<Path>,
-    ) -> Self {
+    ) -> Result<Self, FatCrabError> {
         assert_eq!(order_envelope.order.order_type, FatCrabOrderType::Sell);
         let (tx, rx) =
             mpsc::channel::<FatCrabTakerRequest>(FatCrabTaker::TAKE_TRADE_REQUEST_CHANNEL_SIZE);
-        let actor = FatCrabTakerActor::new(
+        let actor_result = FatCrabTakerActor::new(
             rx,
             order_envelope.to_owned(),
             Some(fatcrab_rx_addr.into()),
@@ -252,12 +263,23 @@ impl FatCrabTaker<TakerSell> {
             dir_path,
         )
         .await;
+
+        let actor = match actor_result {
+            Ok(actor) => actor,
+            Err(error) => {
+                return Err(error);
+            }
+        };
+
         let task_handle = tokio::spawn(async move { actor.run().await });
-        Self {
+
+        let taker = Self {
             tx,
             task_handle,
             _order_type: PhantomData,
-        }
+        };
+
+        Ok(taker)
     }
 
     pub(crate) async fn restore(
@@ -334,7 +356,7 @@ impl FatCrabTakerActor {
         n3xb_taker: TakerAccess,
         purse: PurseAccess,
         dir_path: impl AsRef<Path>,
-    ) -> Self {
+    ) -> Result<Self, FatCrabError> {
         let inner = match order_envelope.order.order_type {
             FatCrabOrderType::Buy => {
                 let buy_actor =
@@ -344,7 +366,7 @@ impl FatCrabTakerActor {
             }
 
             FatCrabOrderType::Sell => {
-                let sell_actor = FatCrabTakerSellActor::new(
+                let sell_actor_result = FatCrabTakerSellActor::new(
                     &order_envelope,
                     fatcrab_rx_addr.unwrap(),
                     n3xb_taker.clone(),
@@ -352,17 +374,25 @@ impl FatCrabTakerActor {
                     dir_path,
                 )
                 .await;
-                FatCrabTakerInnerActor::Sell(sell_actor)
+
+                match sell_actor_result {
+                    Ok(sell_actor) => FatCrabTakerInnerActor::Sell(sell_actor),
+                    Err(error) => {
+                        return Err(error);
+                    }
+                }
             }
         };
 
-        Self {
+        let taker_actor = Self {
             inner,
             trade_uuid: order_envelope.order.trade_uuid,
             rx,
             notif_tx: None,
             n3xb_taker,
-        }
+        };
+
+        Ok(taker_actor)
     }
 
     async fn restore_buy_actor(
@@ -819,9 +849,16 @@ impl FatCrabTakerSellActor {
         n3xb_taker: TakerAccess,
         purse: PurseAccess,
         dir_path: impl AsRef<Path>,
-    ) -> Self {
+    ) -> Result<Self, FatCrabError> {
         let sats = order_envelope.order.amount * order_envelope.order.price;
-        let btc_funds_id = purse.allocate_funds(sats as u64).await.unwrap();
+        let funding_result = purse.allocate_funds(sats as u64).await;
+
+        let btc_funds_id = match funding_result {
+            Ok(btc_funds_id) => btc_funds_id,
+            Err(error) => {
+                return Err(error);
+            }
+        };
 
         let data = FatCrabTakerSellData::new(
             order_envelope.order.trade_uuid,
@@ -831,13 +868,15 @@ impl FatCrabTakerSellActor {
         )
         .await;
 
-        Self {
+        let taker_sell_actor = Self {
             trade_uuid: order_envelope.order.trade_uuid,
             data,
             n3xb_taker,
             purse,
             notif_tx: None,
-        }
+        };
+
+        return Ok(taker_sell_actor);
     }
 
     async fn restore(

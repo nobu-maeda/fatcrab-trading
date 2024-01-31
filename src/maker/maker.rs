@@ -210,11 +210,12 @@ impl FatCrabMaker<MakerBuy> {
         n3xb_maker: MakerAccess,
         purse: PurseAccess,
         dir_path: impl AsRef<Path>,
-    ) -> Self {
+    ) -> Result<Self, FatCrabError> {
         assert_eq!(order.order_type, FatCrabOrderType::Buy);
         let (tx, rx) =
             mpsc::channel::<FatCrabMakerRequest>(FatCrabMaker::MAKE_TRADE_REQUEST_CHANNEL_SIZE);
-        let actor = FatCrabMakerActor::new(
+
+        let actor_result = FatCrabMakerActor::new(
             rx,
             order.to_owned(),
             Some(fatcrab_rx_addr.into()),
@@ -223,13 +224,23 @@ impl FatCrabMaker<MakerBuy> {
             dir_path,
         )
         .await;
+
+        let actor = match actor_result {
+            Ok(actor) => actor,
+            Err(error) => {
+                return Err(error);
+            }
+        };
+
         let task_handle = tokio::spawn(async move { actor.run().await });
 
-        Self {
+        let maker = Self {
             tx,
             task_handle,
             _order_type: PhantomData,
-        }
+        };
+
+        Ok(maker)
     }
 
     pub(crate) async fn restore(
@@ -264,19 +275,30 @@ impl FatCrabMaker<MakerSell> {
         n3xb_maker: MakerAccess,
         purse: PurseAccess,
         dir_path: impl AsRef<Path>,
-    ) -> Self {
+    ) -> Result<Self, FatCrabError> {
         assert_eq!(order.order_type, FatCrabOrderType::Sell);
         let (tx, rx) =
             mpsc::channel::<FatCrabMakerRequest>(FatCrabMaker::MAKE_TRADE_REQUEST_CHANNEL_SIZE);
-        let actor =
+
+        let actor_result =
             FatCrabMakerActor::new(rx, order.to_owned(), None, n3xb_maker, purse, dir_path).await;
+
+        let actor = match actor_result {
+            Ok(actor) => actor,
+            Err(error) => {
+                return Err(error);
+            }
+        };
+
         let task_handle = tokio::spawn(async move { actor.run().await });
 
-        Self {
+        let maker = Self {
             tx,
             task_handle,
             _order_type: PhantomData,
-        }
+        };
+
+        Ok(maker)
     }
 
     pub(crate) async fn restore(
@@ -358,10 +380,10 @@ impl FatCrabMakerActor {
         n3xb_maker: MakerAccess,
         purse: PurseAccess,
         dir_path: impl AsRef<Path>,
-    ) -> Self {
+    ) -> Result<Self, FatCrabError> {
         let inner = match order.order_type {
             FatCrabOrderType::Buy => {
-                let buy_actor = FatCrabMakerBuyActor::new(
+                let buy_actor_result = FatCrabMakerBuyActor::new(
                     &order,
                     fatcrab_rx_addr.unwrap(),
                     n3xb_maker.clone(),
@@ -369,6 +391,14 @@ impl FatCrabMakerActor {
                     dir_path,
                 )
                 .await;
+
+                let buy_actor = match buy_actor_result {
+                    Ok(buy_actor) => buy_actor,
+                    Err(error) => {
+                        return Err(error);
+                    }
+                };
+
                 FatCrabMakerInnerActor::Buy(buy_actor)
             }
 
@@ -379,13 +409,15 @@ impl FatCrabMakerActor {
             }
         };
 
-        Self {
+        let maker_actor = Self {
             inner,
             rx,
             trade_uuid: order.trade_uuid,
             notif_tx: None,
             n3xb_maker,
-        }
+        };
+
+        Ok(maker_actor)
     }
 
     async fn restore_buy_actor(
@@ -726,9 +758,16 @@ impl FatCrabMakerBuyActor {
         n3xb_maker: MakerAccess,
         purse: PurseAccess,
         dir_path: impl AsRef<Path>,
-    ) -> Self {
+    ) -> Result<Self, FatCrabError> {
         let sats = order.amount * order.price;
-        let btc_funds_id = purse.allocate_funds(sats as u64).await.unwrap();
+        let funding_result = purse.allocate_funds(sats as u64).await;
+
+        let btc_funds_id = match funding_result {
+            Ok(btc_funds_id) => btc_funds_id,
+            Err(error) => {
+                return Err(error);
+            }
+        };
 
         let data = FatCrabMakerBuyData::new(
             order.trade_uuid,
@@ -739,13 +778,15 @@ impl FatCrabMakerBuyActor {
         )
         .await;
 
-        Self {
+        let maker_buy_actor = Self {
             trade_uuid: order.trade_uuid,
             data,
             n3xb_maker,
             purse,
             notif_tx: None,
-        }
+        };
+
+        Ok(maker_buy_actor)
     }
 
     async fn restore(

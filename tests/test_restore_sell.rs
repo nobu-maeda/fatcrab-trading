@@ -152,7 +152,7 @@ mod test {
             };
 
             // Maker - Create Fatcrab Maker
-            let maker = trader_m.new_sell_maker(&order).await;
+            let maker = trader_m.new_sell_maker(&order).await.unwrap();
 
             maker.shutdown().await.unwrap();
             trader_m.shutdown().await.unwrap();
@@ -198,7 +198,8 @@ mod test {
             // Taker - Create Fatcrab Take Trader & Take Trade Order
             let taker = trader_t
                 .new_sell_taker(&orders[0], taker_receive_fatcrab_addr)
-                .await;
+                .await
+                .unwrap();
             taker.shutdown().await.unwrap();
             trader_t.shutdown().await.unwrap();
         }

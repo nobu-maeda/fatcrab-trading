@@ -141,7 +141,8 @@ mod test {
             // Maker - Create Fatcrab Maker
             let maker = trader_m
                 .new_buy_maker(&order, maker_receive_fatcrab_addr.clone())
-                .await;
+                .await
+                .unwrap();
 
             maker.shutdown().await.unwrap();
             trader_m.shutdown().await.unwrap();
@@ -181,7 +182,7 @@ mod test {
                 .unwrap();
             assert_eq!(orders.len(), 1);
 
-            let taker = trader_t.new_buy_taker(&orders[0]).await;
+            let taker = trader_t.new_buy_taker(&orders[0]).await.unwrap();
             taker.shutdown().await.unwrap();
             trader_t.shutdown().await.unwrap();
         }

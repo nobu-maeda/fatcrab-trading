@@ -501,13 +501,13 @@ impl FatCrabTrader {
         &self,
         order: &FatCrabOrder,
         fatcrab_rx_addr: impl Into<String>,
-    ) -> FatCrabMakerAccess<MakerBuy> {
+    ) -> Result<FatCrabMakerAccess<MakerBuy>, FatCrabError> {
         assert_eq!(order.order_type, FatCrabOrderType::Buy);
 
         let n3xb_maker = self.n3xb_manager.new_maker(order.clone().into()).await;
         let trade_uuid = order.trade_uuid.clone();
 
-        let maker = FatCrabMaker::<MakerBuy>::new(
+        let maker_result = FatCrabMaker::<MakerBuy>::new(
             order,
             fatcrab_rx_addr,
             n3xb_maker,
@@ -515,6 +515,11 @@ impl FatCrabTrader {
             self.trader_dir_path.join(MAKER_BUY_DIR_STR),
         )
         .await;
+
+        let maker = match maker_result {
+            Ok(maker) => maker,
+            Err(error) => return Err(error),
+        };
         let maker_accessor = maker.new_accessor();
         let maker_return_accessor = maker.new_accessor();
 
@@ -524,22 +529,29 @@ impl FatCrabTrader {
         let mut maker_accessors = self.maker_accessors.write().await;
         maker_accessors.insert(trade_uuid, FatCrabMakerAccessEnum::Buy(maker_accessor));
 
-        maker_return_accessor
+        Ok(maker_return_accessor)
     }
 
-    pub async fn new_sell_maker(&self, order: &FatCrabOrder) -> FatCrabMakerAccess<MakerSell> {
+    pub async fn new_sell_maker(
+        &self,
+        order: &FatCrabOrder,
+    ) -> Result<FatCrabMakerAccess<MakerSell>, FatCrabError> {
         assert_eq!(order.order_type, FatCrabOrderType::Sell);
 
         let n3xb_maker = self.n3xb_manager.new_maker(order.clone().into()).await;
         let trade_uuid = order.trade_uuid.clone();
 
-        let maker = FatCrabMaker::<MakerSell>::new(
+        let maker_result = FatCrabMaker::<MakerSell>::new(
             order,
             n3xb_maker,
             self.purse.new_accessor(),
             self.trader_dir_path.join(MAKER_SELL_DIR_STR),
         )
         .await;
+        let maker = match maker_result {
+            Ok(maker) => maker,
+            Err(error) => return Err(error),
+        };
         let maker_accessor = maker.new_accessor();
         let maker_return_accessor = maker.new_accessor();
 
@@ -549,7 +561,7 @@ impl FatCrabTrader {
         let mut maker_accessors = self.maker_accessors.write().await;
         maker_accessors.insert(trade_uuid, FatCrabMakerAccessEnum::Sell(maker_accessor));
 
-        maker_return_accessor
+        Ok(maker_return_accessor)
     }
 
     pub async fn query_orders(
@@ -602,7 +614,7 @@ impl FatCrabTrader {
     pub async fn new_buy_taker(
         &self,
         order_envelope: &FatCrabOrderEnvelope,
-    ) -> FatCrabTakerAccess<TakerBuy> {
+    ) -> Result<FatCrabTakerAccess<TakerBuy>, FatCrabError> {
         assert_eq!(order_envelope.order.order_type, FatCrabOrderType::Buy);
 
         let n3xb_taker = self
@@ -615,13 +627,19 @@ impl FatCrabTrader {
             .unwrap();
         let trade_uuid = order_envelope.order.trade_uuid.clone();
 
-        let taker = FatCrabTaker::<TakerBuy>::new(
+        let taker_result = FatCrabTaker::<TakerBuy>::new(
             order_envelope,
             n3xb_taker,
             self.purse.new_accessor(),
             self.trader_dir_path.join(TAKER_BUY_DIR_STR),
         )
         .await;
+
+        let taker = match taker_result {
+            Ok(taker) => taker,
+            Err(err) => return Err(err),
+        };
+
         let taker_accessor = taker.new_accessor();
         let taker_return_accessor = taker.new_accessor();
 
@@ -631,14 +649,14 @@ impl FatCrabTrader {
         let mut taker_accessors = self.taker_accessors.write().await;
         taker_accessors.insert(trade_uuid, FatCrabTakerAccessEnum::Buy(taker_accessor));
 
-        taker_return_accessor
+        Ok(taker_return_accessor)
     }
 
     pub async fn new_sell_taker(
         &self,
         order_envelope: &FatCrabOrderEnvelope,
         fatcrab_rx_addr: impl Into<String>,
-    ) -> FatCrabTakerAccess<TakerSell> {
+    ) -> Result<FatCrabTakerAccess<TakerSell>, FatCrabError> {
         assert_eq!(order_envelope.order.order_type, FatCrabOrderType::Sell);
 
         let n3xb_taker = self
@@ -651,7 +669,7 @@ impl FatCrabTrader {
             .unwrap();
         let trade_uuid = order_envelope.order.trade_uuid.clone();
 
-        let taker = FatCrabTaker::<TakerSell>::new(
+        let taker_result = FatCrabTaker::<TakerSell>::new(
             order_envelope,
             fatcrab_rx_addr,
             n3xb_taker,
@@ -659,6 +677,12 @@ impl FatCrabTrader {
             self.trader_dir_path.join(TAKER_SELL_DIR_STR),
         )
         .await;
+
+        let taker = match taker_result {
+            Ok(taker) => taker,
+            Err(err) => return Err(err),
+        };
+
         let taker_accessor = taker.new_accessor();
         let taker_return_accessor = taker.new_accessor();
 
@@ -668,7 +692,7 @@ impl FatCrabTrader {
         let mut taker_accessors = self.taker_accessors.write().await;
         taker_accessors.insert(trade_uuid, FatCrabTakerAccessEnum::Sell(taker_accessor));
 
-        taker_return_accessor
+        Ok(taker_return_accessor)
     }
 
     pub async fn get_makers(&self) -> HashMap<Uuid, FatCrabMakerAccessEnum> {
