@@ -3,10 +3,10 @@ mod common;
 #[cfg(test)]
 mod test {
     use log::error;
-    use std::{net::SocketAddr, str::FromStr, time::Duration};
+    use std::{fs, net::SocketAddr, str::FromStr, time::Duration};
 
     use secp256k1::SecretKey;
-    use tokio::{fs, time::sleep};
+    use tokio::time::sleep;
     use url::Url;
     use uuid::Uuid;
 
@@ -30,10 +30,10 @@ mod test {
         // logger_setup();
 
         // Setup initial state
-        if let Some(error) = fs::remove_dir_all("n3xb_data/").await.err() {
+        if let Some(error) = fs::remove_dir_all("n3xb_data/").err() {
             error!("Failed to remove /n3xb_data/ directory: {}", error);
         }
-        if let Some(error) = fs::remove_dir_all("fatcrab_data/").await.err() {
+        if let Some(error) = fs::remove_dir_all("fatcrab_data/").err() {
             error!("Failed to remove /fatcrab_data/ directory: {}", error);
         }
 

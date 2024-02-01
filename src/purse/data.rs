@@ -41,39 +41,40 @@ impl PurseData {
             .as_ref()
             .join(format!("{}.json", pubkey_string.as_ref()));
 
-        let store = PurseDataStore {
+        let mut store = PurseDataStore {
             network,
             height,
             allocated_funds: HashMap::new(),
         };
 
+        if data_path.exists() {
+            match Self::restore(&data_path) {
+                Ok(restored_data) => {
+                    store = restored_data;
+                }
+                Err(error) => {
+                    panic!(
+                        "Purse w/ Pubkey {} - Error restoring data from path {}: {}",
+                        pubkey_string.as_ref().to_string(),
+                        data_path.display().to_string(),
+                        error
+                    );
+                }
+            }
+        }
+
         let store: Arc<RwLock<PurseDataStore>> = Arc::new(RwLock::new(store));
         let generic_store: Arc<RwLock<dyn SerdeGenericTrait + 'static>> = store.clone();
-        let persister = Persister::new(generic_store, data_path);
+        let persister = Persister::new(generic_store, &data_path);
         persister.queue();
 
         Self { store, persister }
     }
 
-    pub(crate) fn restore(
-        pubkey_string: impl AsRef<str>,
-        dir_path: impl AsRef<Path>,
-    ) -> Result<Self, FatCrabError> {
-        let data_path = dir_path
-            .as_ref()
-            .join(format!("{}.json", pubkey_string.as_ref()));
-
+    fn restore(data_path: impl AsRef<Path>) -> Result<PurseDataStore, FatCrabError> {
         let json = Persister::restore(&data_path)?;
         let store = serde_json::from_str::<PurseDataStore>(&json)?;
-
-        let store: Arc<RwLock<PurseDataStore>> = Arc::new(RwLock::new(store));
-        let generic_store: Arc<RwLock<dyn SerdeGenericTrait + 'static>> = store.clone();
-
-        let data = Self {
-            store,
-            persister: Persister::new(generic_store, data_path),
-        };
-        Ok(data)
+        Ok(store)
     }
 
     fn read_store(&self) -> RwLockReadGuard<'_, PurseDataStore> {

@@ -2,7 +2,8 @@ mod common;
 
 #[cfg(test)]
 mod test {
-    use std::{net::SocketAddr, str::FromStr};
+    use log::error;
+    use std::{fs, net::SocketAddr, str::FromStr};
 
     use fatcrab_trading::{
         common::BlockchainInfo,
@@ -16,13 +17,23 @@ mod test {
     use url::Url;
     use uuid::Uuid;
 
-    use super::common::{node::Node, relay::Relay};
+    use super::common::{logger::setup as logger_setup, node::Node, relay::Relay};
 
     #[tokio::test]
     async fn test_buy_order() {
         const MAKER_BALANCE: u64 = 1000000;
         const PURCHASE_AMOUNT: f64 = 100.0;
         const PURCHASE_PRICE: f64 = 1000.0;
+
+        // logger_setup();
+
+        // Setup initial state
+        if let Some(error) = fs::remove_dir_all("n3xb_data/").err() {
+            error!("Failed to remove /n3xb_data/ directory: {}", error);
+        }
+        if let Some(error) = fs::remove_dir_all("fatcrab_data/").err() {
+            error!("Failed to remove /fatcrab_data/ directory: {}", error);
+        }
 
         // Initialize Regtest Bitcoin blockchain & mine 101 blocks
         let node = Node::new();

@@ -76,7 +76,7 @@ impl FatCrabTrader {
                 .join(format!("{}/{}", DATA_DIR_PATH_STR, pubkey.to_string()));
 
         let purse_dir_path = trader_dir_path.join(PURSE_DIR_STR);
-        tokio::fs::create_dir_all(&purse_dir_path).await.unwrap();
+        std::fs::create_dir_all(&purse_dir_path).unwrap();
 
         let purse = Purse::new(secret_key, info, purse_dir_path);
         let purse_accessor = purse.new_accessor();
@@ -112,8 +112,7 @@ impl FatCrabTrader {
             &self.purse_accessor,
             pubkey.to_string(),
             &self.trader_dir_path,
-        )
-        .await;
+        );
 
         let maker_accessors: HashMap<Uuid, FatCrabMakerAccessEnum> = makers
             .iter()
@@ -153,7 +152,7 @@ impl FatCrabTrader {
         Ok(())
     }
 
-    async fn restore_maker_takers(
+    fn restore_maker_takers(
         n3xb_makers: &HashMap<Uuid, MakerAccess>,
         n3xb_takers: &HashMap<Uuid, TakerAccess>,
         purse_accessor: &PurseAccess,
@@ -169,28 +168,26 @@ impl FatCrabTrader {
                 HashMap<Uuid, FatCrabTakerEnum>,
             ),
             FatCrabError,
-        > = async {
+        > = (|| {
             let maker_buy_dir_path = trader_dir_path.as_ref().join(MAKER_BUY_DIR_STR);
-            tokio::fs::create_dir_all(&maker_buy_dir_path).await?;
+            std::fs::create_dir_all(&maker_buy_dir_path)?;
             let buy_makers =
-                Self::restore_buy_makers(n3xb_makers, purse_accessor, &maker_buy_dir_path).await?;
+                Self::restore_buy_makers(n3xb_makers, purse_accessor, &maker_buy_dir_path)?;
 
             let maker_sell_dir_path = trader_dir_path.as_ref().join(MAKER_SELL_DIR_STR);
-            tokio::fs::create_dir_all(&maker_sell_dir_path).await?;
+            std::fs::create_dir_all(&maker_sell_dir_path)?;
             let sell_makers =
-                Self::restore_sell_makers(n3xb_makers, purse_accessor, &maker_sell_dir_path)
-                    .await?;
+                Self::restore_sell_makers(n3xb_makers, purse_accessor, &maker_sell_dir_path)?;
 
             let taker_buy_dir_path = trader_dir_path.as_ref().join(TAKER_BUY_DIR_STR);
-            tokio::fs::create_dir_all(&taker_buy_dir_path).await?;
+            std::fs::create_dir_all(&taker_buy_dir_path)?;
             let buy_takers =
-                Self::restore_buy_takers(n3xb_takers, purse_accessor, &taker_buy_dir_path).await?;
+                Self::restore_buy_takers(n3xb_takers, purse_accessor, &taker_buy_dir_path)?;
 
             let taker_sell_dir_path = trader_dir_path.as_ref().join(TAKER_SELL_DIR_STR);
-            tokio::fs::create_dir_all(&taker_sell_dir_path).await?;
+            std::fs::create_dir_all(&taker_sell_dir_path)?;
             let sell_takers =
-                Self::restore_sell_takers(n3xb_takers, purse_accessor, &taker_sell_dir_path)
-                    .await?;
+                Self::restore_sell_takers(n3xb_takers, purse_accessor, &taker_sell_dir_path)?;
 
             let makers = buy_makers
                 .into_iter()
@@ -203,8 +200,7 @@ impl FatCrabTrader {
                 .collect();
 
             Ok((makers, takers))
-        }
-        .await;
+        })();
 
         match result {
             Ok((makers, takers)) => {
@@ -223,17 +219,17 @@ impl FatCrabTrader {
         }
     }
 
-    async fn restore_buy_makers(
+    fn restore_buy_makers(
         n3xb_makers: &HashMap<Uuid, MakerAccess>,
         purse_accessor: &PurseAccess,
         maker_buy_dir_path: impl AsRef<Path>,
     ) -> Result<HashMap<Uuid, FatCrabMakerEnum>, FatCrabError> {
         let mut makers = HashMap::new();
-        let mut maker_files = tokio::fs::read_dir(maker_buy_dir_path.as_ref()).await?;
+        let mut maker_files = std::fs::read_dir(maker_buy_dir_path.as_ref())?;
 
-        while let Some(maker_file) = maker_files.next_entry().await? {
+        while let Some(maker_file_result) = maker_files.next() {
             if let Some((trade_uuid, maker)) =
-                Self::restore_buy_maker(n3xb_makers, purse_accessor, maker_file.path()).await
+                Self::restore_buy_maker(n3xb_makers, purse_accessor, maker_file_result?.path())
             {
                 makers.insert(trade_uuid, maker);
             }
@@ -241,7 +237,7 @@ impl FatCrabTrader {
         Ok(makers)
     }
 
-    async fn restore_buy_maker(
+    fn restore_buy_maker(
         n3xb_makers: &HashMap<Uuid, MakerAccess>,
         purse_accessor: &PurseAccess,
         maker_buy_data_path: impl AsRef<Path>,
@@ -270,26 +266,27 @@ impl FatCrabTrader {
             n3xb_maker.clone(),
             purse_accessor.clone(),
             maker_buy_data_path,
-        )
-        .await
-        {
+        ) {
             Ok(maker) => maker,
-            Err(_) => return None,
+            Err(error) => {
+                panic!("Error restoring Buy Maker - {}", error);
+                // return None;
+            }
         };
         Some((trade_uuid, FatCrabMakerEnum::Buy(maker)))
     }
 
-    async fn restore_sell_makers(
+    fn restore_sell_makers(
         n3xb_makers: &HashMap<Uuid, MakerAccess>,
         purse_accessor: &PurseAccess,
         maker_sell_dir_path: impl AsRef<Path>,
     ) -> Result<HashMap<Uuid, FatCrabMakerEnum>, FatCrabError> {
         let mut makers = HashMap::new();
-        let mut maker_files = tokio::fs::read_dir(maker_sell_dir_path.as_ref()).await?;
+        let mut maker_files = std::fs::read_dir(maker_sell_dir_path.as_ref())?;
 
-        while let Some(maker_file) = maker_files.next_entry().await? {
+        while let Some(maker_file_result) = maker_files.next() {
             if let Some((trade_uuid, maker)) =
-                Self::restore_sell_maker(n3xb_makers, purse_accessor, maker_file.path()).await
+                Self::restore_sell_maker(n3xb_makers, purse_accessor, maker_file_result?.path())
             {
                 makers.insert(trade_uuid, maker);
             }
@@ -297,7 +294,7 @@ impl FatCrabTrader {
         Ok(makers)
     }
 
-    async fn restore_sell_maker(
+    fn restore_sell_maker(
         n3xb_makers: &HashMap<Uuid, MakerAccess>,
         purse_accessor: &PurseAccess,
         maker_sell_data_path: impl AsRef<Path>,
@@ -326,26 +323,27 @@ impl FatCrabTrader {
             n3xb_maker.clone(),
             purse_accessor.clone(),
             maker_sell_data_path,
-        )
-        .await
-        {
+        ) {
             Ok(maker) => maker,
-            Err(_) => return None,
+            Err(error) => {
+                panic!("Error restoring Sell Maker - {}", error);
+                // return None;
+            }
         };
         Some((trade_uuid, FatCrabMakerEnum::Sell(maker)))
     }
 
-    async fn restore_buy_takers(
+    fn restore_buy_takers(
         n3xb_takers: &HashMap<Uuid, TakerAccess>,
         purse_accessor: &PurseAccess,
         taker_buy_dir_path: impl AsRef<Path>,
     ) -> Result<HashMap<Uuid, FatCrabTakerEnum>, FatCrabError> {
         let mut takers = HashMap::new();
-        let mut taker_files = tokio::fs::read_dir(taker_buy_dir_path.as_ref()).await?;
+        let mut taker_files = std::fs::read_dir(taker_buy_dir_path.as_ref())?;
 
-        while let Some(taker_file) = taker_files.next_entry().await.unwrap() {
+        while let Some(taker_file_result) = taker_files.next() {
             if let Some((trade_uuid, taker)) =
-                Self::restore_buy_taker(n3xb_takers, purse_accessor, taker_file.path()).await
+                Self::restore_buy_taker(n3xb_takers, purse_accessor, taker_file_result?.path())
             {
                 takers.insert(trade_uuid, taker);
             }
@@ -353,7 +351,7 @@ impl FatCrabTrader {
         Ok(takers)
     }
 
-    async fn restore_buy_taker(
+    fn restore_buy_taker(
         n3xb_takers: &HashMap<Uuid, TakerAccess>,
         purse_accessor: &PurseAccess,
         taker_buy_data_path: impl AsRef<Path>,
@@ -382,26 +380,27 @@ impl FatCrabTrader {
             n3xb_taker.clone(),
             purse_accessor.clone(),
             taker_buy_data_path,
-        )
-        .await
-        {
+        ) {
             Ok(taker) => taker,
-            Err(_) => return None,
+            Err(error) => {
+                panic!("Error restoring Buy Taker - {}", error);
+                // return None;
+            }
         };
         Some((trade_uuid, FatCrabTakerEnum::Buy(taker)))
     }
 
-    async fn restore_sell_takers(
+    fn restore_sell_takers(
         n3xb_takers: &HashMap<Uuid, TakerAccess>,
         purse_accessor: &PurseAccess,
         taker_sell_dir_path: impl AsRef<Path>,
     ) -> Result<HashMap<Uuid, FatCrabTakerEnum>, FatCrabError> {
         let mut takers = HashMap::new();
-        let mut taker_files = tokio::fs::read_dir(taker_sell_dir_path.as_ref()).await?;
+        let mut taker_files = std::fs::read_dir(taker_sell_dir_path.as_ref())?;
 
-        while let Some(taker_file) = taker_files.next_entry().await.unwrap() {
+        while let Some(taker_file_result) = taker_files.next() {
             if let Some((trade_uuid, taker)) =
-                Self::restore_sell_taker(n3xb_takers, purse_accessor, taker_file.path()).await
+                Self::restore_sell_taker(n3xb_takers, purse_accessor, taker_file_result?.path())
             {
                 takers.insert(trade_uuid, taker);
             }
@@ -409,7 +408,7 @@ impl FatCrabTrader {
         Ok(takers)
     }
 
-    async fn restore_sell_taker(
+    fn restore_sell_taker(
         n3xb_takers: &HashMap<Uuid, TakerAccess>,
         purse_accessor: &PurseAccess,
         taker_sell_data_path: impl AsRef<Path>,
@@ -438,11 +437,12 @@ impl FatCrabTrader {
             n3xb_taker.clone(),
             purse_accessor.clone(),
             taker_sell_data_path,
-        )
-        .await
-        {
+        ) {
             Ok(taker) => taker,
-            Err(_) => return None,
+            Err(error) => {
+                panic!("Error restoring Buy Taker - {}", error);
+                // return None;
+            }
         };
         Some((trade_uuid, FatCrabTakerEnum::Sell(taker)))
     }

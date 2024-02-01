@@ -1,7 +1,6 @@
 use ::log::{error, trace};
 use std::{
-    fs::File,
-    io::Write,
+    fs,
     path::Path,
     sync::{
         mpsc::{self, TrySendError},
@@ -83,9 +82,7 @@ impl Persister {
         data_path: impl AsRef<Path>,
     ) -> Result<(), FatCrabError> {
         let json = serde_json::to_string(&*store)?;
-        let mut file = File::create(data_path.as_ref())?;
-        file.write_all(json.as_bytes())?;
-        file.sync_all()?;
+        fs::write(data_path.as_ref(), json)?;
         Ok(())
     }
 

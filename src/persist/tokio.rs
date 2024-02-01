@@ -2,8 +2,7 @@ use log::{error, trace};
 use std::{path::Path, sync::Arc};
 
 use tokio::{
-    io::AsyncWriteExt,
-    select,
+    fs, select,
     sync::{mpsc, RwLock, RwLockReadGuard},
 };
 
@@ -70,9 +69,7 @@ impl Persister {
         data_path: impl AsRef<Path>,
     ) -> Result<(), FatCrabError> {
         let json = serde_json::to_string(&*store).unwrap();
-        let mut file = tokio::fs::File::create(data_path.as_ref()).await?;
-        file.write_all(json.as_bytes()).await?;
-        file.sync_all().await?;
+        fs::write(data_path, json).await?;
         Ok(())
     }
 

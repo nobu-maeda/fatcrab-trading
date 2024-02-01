@@ -1,4 +1,4 @@
-use log::{info, warn};
+use log::warn;
 use std::path::Path;
 
 use bdk::{
@@ -311,26 +311,15 @@ where
         .unwrap();
 
         let height = blockchain.get_height().unwrap_or(0);
+        let data = PurseData::new(pubkey.to_string(), network, height, &dir_path);
 
-        let data = match PurseData::restore(pubkey.to_string(), &dir_path) {
-            Ok(data) => {
-                // Check if the restored data matches for height & network
-                if data.network() != network {
-                    panic!("Network mismatch between restored data and provided network");
-                }
-                if data.height() > height {
-                    warn!("Block height is higher in restored data than provided network");
-                }
-                data
-            }
-            Err(err) => {
-                info!(
-                    "PurseData not restored from disk. Creating new PurseData - {}",
-                    err
-                );
-                PurseData::new(pubkey.to_string(), network, height, &dir_path)
-            }
-        };
+        // Check if the restored data matches for height & network
+        if data.network() != network {
+            panic!("Network mismatch between restored data and provided network");
+        }
+        if data.height() > height {
+            warn!("Block height is higher in restored data than provided network");
+        }
 
         Self {
             rx,
