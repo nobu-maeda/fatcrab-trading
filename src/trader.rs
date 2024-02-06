@@ -500,6 +500,11 @@ impl FatCrabTrader {
         self.n3xb_manager.get_relays().await
     }
 
+    pub async fn remove_relay(&self, url: Url) -> Result<(), FatCrabError> {
+        self.n3xb_manager.remove_relay(url).await?;
+        Ok(())
+    }
+
     pub async fn new_buy_maker(
         &self,
         order: &FatCrabOrder,
