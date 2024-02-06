@@ -91,16 +91,16 @@ mod test {
             trader_t.reconnect().await.unwrap();
 
             // Check relays as expected
-            let urls = trader_m.get_relays().await;
-            urls.iter().for_each(|url| {
-                assert_eq!(url, &relay_addrs[0].0);
-                assert_eq!(urls.len(), relay_addrs.len());
+            let relays_info = trader_m.get_relays().await;
+            relays_info.iter().for_each(|relay_info| {
+                assert_eq!(relay_info.url, relay_addrs[0].0);
+                assert_eq!(relays_info.len(), relay_addrs.len());
             });
 
-            let urls = trader_t.get_relays().await;
-            urls.iter().for_each(|url| {
-                assert_eq!(url, &relay_addrs[0].0);
-                assert_eq!(urls.len(), relay_addrs.len());
+            let relays_info = trader_t.get_relays().await;
+            relays_info.iter().for_each(|relay_info| {
+                assert_eq!(relay_info.url, relay_addrs[0].0);
+                assert_eq!(relays_info.len(), relay_addrs.len());
             });
 
             // Maker - Fund Maker Fatcrab Trader internal wallet from miner

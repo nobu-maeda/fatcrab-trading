@@ -10,3 +10,5 @@ pub mod trader;
 
 mod persist;
 mod purse;
+
+pub use trader::{RelayInfo, RelayInformationDocument, RelayStatus};

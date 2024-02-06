@@ -8,6 +8,7 @@ use url::Url;
 
 use bip39::Mnemonic;
 use bitcoin::{Address, Txid};
+
 use crusty_n3xb::{
     common::types::{BitcoinSettlementMethod, ObligationKind},
     maker::MakerAccess,
@@ -15,6 +16,8 @@ use crusty_n3xb::{
     order::FilterTag,
     taker::TakerAccess,
 };
+pub use crusty_n3xb::{RelayInfo, RelayInformationDocument, RelayStatus};
+
 use secp256k1::{rand, SecretKey, XOnlyPublicKey};
 use tokio::sync::RwLock;
 use tokio::task::JoinError;
@@ -493,7 +496,7 @@ impl FatCrabTrader {
         Ok(())
     }
 
-    pub async fn get_relays(&self) -> Vec<Url> {
+    pub async fn get_relays(&self) -> Vec<RelayInfo> {
         self.n3xb_manager.get_relays().await
     }
 
