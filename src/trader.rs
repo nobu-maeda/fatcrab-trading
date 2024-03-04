@@ -707,6 +707,50 @@ impl FatCrabTrader {
         self.maker_accessors.read().await.clone()
     }
 
+    pub async fn get_buy_makers(&self) -> HashMap<Uuid, FatCrabMakerAccess<MakerBuy>> {
+        let maker_accessors = self.maker_accessors.read().await.clone();
+        let mut buy_makers = HashMap::new();
+        for (uuid, maker_accessor) in maker_accessors.iter() {
+            if let FatCrabMakerAccessEnum::Buy(maker_accessor) = maker_accessor {
+                buy_makers.insert(uuid.clone(), maker_accessor.clone());
+            }
+        }
+        buy_makers
+    }
+
+    pub async fn get_sell_makers(&self) -> HashMap<Uuid, FatCrabMakerAccess<MakerSell>> {
+        let maker_accessors = self.maker_accessors.read().await;
+        let mut sell_makers = HashMap::new();
+        for (uuid, maker_accessor) in maker_accessors.iter() {
+            if let FatCrabMakerAccessEnum::Sell(maker_accessor) = maker_accessor {
+                sell_makers.insert(uuid.clone(), maker_accessor.clone());
+            }
+        }
+        sell_makers
+    }
+
+    pub async fn get_buy_takers(&self) -> HashMap<Uuid, FatCrabTakerAccess<TakerBuy>> {
+        let taker_accessors = self.taker_accessors.read().await;
+        let mut buy_takers = HashMap::new();
+        for (uuid, taker_accessor) in taker_accessors.iter() {
+            if let FatCrabTakerAccessEnum::Buy(taker_accessor) = taker_accessor {
+                buy_takers.insert(uuid.clone(), taker_accessor.clone());
+            }
+        }
+        buy_takers
+    }
+
+    pub async fn get_sell_takers(&self) -> HashMap<Uuid, FatCrabTakerAccess<TakerSell>> {
+        let taker_accessors = self.taker_accessors.read().await;
+        let mut sell_takers = HashMap::new();
+        for (uuid, taker_accessor) in taker_accessors.iter() {
+            if let FatCrabTakerAccessEnum::Sell(taker_accessor) = taker_accessor {
+                sell_takers.insert(uuid.clone(), taker_accessor.clone());
+            }
+        }
+        sell_takers
+    }
+
     pub async fn get_takers(&self) -> HashMap<Uuid, FatCrabTakerAccessEnum> {
         self.taker_accessors.read().await.clone()
     }
