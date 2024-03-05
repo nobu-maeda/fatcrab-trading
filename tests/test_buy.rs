@@ -130,6 +130,10 @@ mod test {
             .unwrap();
         assert_eq!(orders.len(), 1);
 
+        let order_envelope = orders[0].clone();
+        assert_eq!(order_envelope.order.amount, PURCHASE_AMOUNT);
+        assert_eq!(order_envelope.order.price, PURCHASE_PRICE);
+
         // Taker - Create Fatcrab Take Trader & Take Trade Order
         let taker = trader_t.new_buy_taker(&orders[0]).await.unwrap();
 

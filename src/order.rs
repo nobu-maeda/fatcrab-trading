@@ -68,6 +68,8 @@ impl FatCrabOrder {
                     if string == FATCRAB_OBLIGATION_CUSTOM_KIND_STRING {
                         intended_order_kind = Some(FatCrabOrderType::Sell);
                         amount = Some(order.maker_obligation.content.amount);
+
+                        // Limit rate is BTC of Taker over FC of Maker. Aka price
                         price = Some(order.taker_obligation.content.limit_rate.unwrap());
                     }
                 }
@@ -77,8 +79,10 @@ impl FatCrabOrder {
                             intended_order_kind = Some(FatCrabOrderType::Buy);
                             let bitcoin_sat_amount = order.maker_obligation.content.amount;
                             let limit_rate = order.taker_obligation.content.limit_rate.unwrap();
+
+                            // Limit rate is FC of Taker over BTC of Maker. Inverse of price
                             price = Some(1.0 / limit_rate);
-                            amount = Some(bitcoin_sat_amount as f64 * limit_rate);
+                            amount = Some(bitcoin_sat_amount * limit_rate);
                         }
                     }
                 }
@@ -163,7 +167,7 @@ impl Into<Order> for FatCrabOrder {
                 let maker_obligation_kinds =
                     HashSet::from_iter(vec![maker_obligation_kind].into_iter());
                 let maker_obligation_content = MakerObligationContent {
-                    amount: self.amount,
+                    amount: self.amount * self.price, // n3xb amount should be in sats for Maker
                     amount_min: None,
                 };
 
@@ -177,6 +181,8 @@ impl Into<Order> for FatCrabOrder {
                 let taker_obligation_kind = ObligationKind::Custom("FatCrab".to_string());
                 let taker_obligation_kinds =
                     HashSet::from_iter(vec![taker_obligation_kind].into_iter());
+
+                // Limit is Taker FC over Maker BTC. Inverse of price
                 let taker_obligation_content = TakerObligationContent {
                     limit_rate: Some(1.0 / self.price),
                     market_offset_pct: None,
@@ -200,7 +206,7 @@ impl Into<Order> for FatCrabOrder {
                 let maker_obligation_kinds =
                     HashSet::from_iter(vec![maker_obligation_kind].into_iter());
                 let maker_obligation_content = MakerObligationContent {
-                    amount: self.amount,
+                    amount: self.amount, // n3xb amount for Maker selling in FC
                     amount_min: None,
                 };
 
@@ -216,7 +222,7 @@ impl Into<Order> for FatCrabOrder {
                 let taker_obligation_kinds =
                     HashSet::from_iter(vec![taker_obligation_kind].into_iter());
                 let taker_obligation_content = TakerObligationContent {
-                    limit_rate: Some(self.price),
+                    limit_rate: Some(self.price), // n3xb limit is BTC of taker / FC of maker. Aka price
                     market_offset_pct: None,
                     market_oracles: None,
                 };

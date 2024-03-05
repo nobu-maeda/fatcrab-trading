@@ -131,6 +131,11 @@ mod test {
             .unwrap();
         assert_eq!(orders.len(), 1);
 
+        let order_envelope = &orders[0];
+        let order = &order_envelope.order;
+        assert_eq!(order.amount, PURCHASE_AMOUNT);
+        assert_eq!(order.price, PURCHASE_PRICE);
+
         // Taker - Create Fatcrab Take Trader & Take Trade Order
         let taker_receive_fatcrab_addr = Uuid::new_v4().to_string();
         let taker = trader_t
