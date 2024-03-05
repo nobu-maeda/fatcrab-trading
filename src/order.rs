@@ -23,13 +23,13 @@ impl SerdeGenericTrait for FatCrabMakeOrderSpecifics {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum FatCrabOrderType {
     Buy,
     Sell,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FatCrabOrderEnvelope {
     pub order: FatCrabOrder,
     pub(crate) envelope: OrderEnvelope,
@@ -40,7 +40,7 @@ pub struct FatCrabOrderEnvelope {
 unsafe impl Sync for FatCrabOrderEnvelope {}
 unsafe impl Send for FatCrabOrderEnvelope {}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FatCrabOrder {
     pub order_type: FatCrabOrderType,
     pub trade_uuid: Uuid,

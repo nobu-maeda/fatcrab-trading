@@ -103,6 +103,15 @@ impl<OrderType> FatCrabMakerAccess<OrderType> {
         rsp_rx.await.unwrap()
     }
 
+    pub async fn get_order_details(&self) -> Result<FatCrabOrder, FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<FatCrabOrder, FatCrabError>>();
+        self.tx
+            .send(FatCrabMakerRequest::GetOrderDetails { rsp_tx })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
     pub async fn query_offers(&self) -> Result<Vec<FatCrabOfferEnvelope>, FatCrabError> {
         let (rsp_tx, rsp_rx) =
             oneshot::channel::<Result<Vec<FatCrabOfferEnvelope>, FatCrabError>>();
@@ -331,6 +340,9 @@ enum FatCrabMakerRequest {
     PostNewOrder {
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
     },
+    GetOrderDetails {
+        rsp_tx: oneshot::Sender<Result<FatCrabOrder, FatCrabError>>,
+    },
     QueryOffers {
         rsp_tx: oneshot::Sender<Result<Vec<FatCrabOfferEnvelope>, FatCrabError>>,
     },
@@ -470,6 +482,9 @@ impl FatCrabMakerActor {
                         FatCrabMakerRequest::PostNewOrder { rsp_tx } => {
                             self.post_new_order(rsp_tx).await;
                         },
+                        FatCrabMakerRequest::GetOrderDetails { rsp_tx } => {
+                            self.get_order_details(rsp_tx);
+                        },
                         FatCrabMakerRequest::QueryOffers { rsp_tx } => {
                             self.query_offers(rsp_tx);
                         },
@@ -555,6 +570,14 @@ impl FatCrabMakerActor {
         } else {
             rsp_tx.send(Ok(())).unwrap();
         }
+    }
+
+    fn get_order_details(&self, rsp_tx: oneshot::Sender<Result<FatCrabOrder, FatCrabError>>) {
+        let order = match self.inner {
+            FatCrabMakerInnerActor::Buy(ref buy_actor) => buy_actor.data.order(),
+            FatCrabMakerInnerActor::Sell(ref sell_actor) => sell_actor.data.order(),
+        };
+        rsp_tx.send(Ok(order)).unwrap();
     }
 
     fn query_offers(
@@ -766,7 +789,7 @@ impl FatCrabMakerBuyActor {
         };
 
         let data = FatCrabMakerBuyData::new(
-            order.trade_uuid,
+            order,
             purse.network,
             fatcrab_rx_addr,
             btc_funds_id,
@@ -932,8 +955,7 @@ impl FatCrabMakerSellActor {
     ) -> Self {
         let btc_rx_addr = purse.get_rx_address().await.unwrap();
 
-        let data =
-            FatCrabMakerSellData::new(order.trade_uuid, purse.network, btc_rx_addr, dir_path);
+        let data = FatCrabMakerSellData::new(order, purse.network, btc_rx_addr, dir_path);
 
         Self {
             trade_uuid: order.trade_uuid,

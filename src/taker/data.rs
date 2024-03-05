@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::{
     common::{parse_address, SerdeGenericTrait},
     error::FatCrabError,
+    order::FatCrabOrderEnvelope,
     peer::FatCrabPeerEnvelope,
     persist::std::Persister,
     trade_rsp::FatCrabTradeRspEnvelope,
@@ -17,7 +18,7 @@ use crate::{
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct FatCrabTakerBuyDataStore {
-    trade_uuid: Uuid,
+    order_envelope: FatCrabOrderEnvelope,
     btc_rx_addr: String,
     peer_btc_txid: Option<Txid>,
     trade_rsp_envelope: Option<FatCrabTradeRspEnvelope>,
@@ -40,15 +41,17 @@ pub(crate) struct FatCrabTakerBuyData {
 
 impl FatCrabTakerBuyData {
     pub(crate) fn new(
-        trade_uuid: Uuid,
+        order_envelope: &FatCrabOrderEnvelope,
         network: Network,
         btc_rx_addr: Address,
         dir_path: impl AsRef<Path>,
     ) -> Self {
-        let data_path = dir_path.as_ref().join(format!("{}.json", trade_uuid));
+        let data_path = dir_path
+            .as_ref()
+            .join(format!("{}.json", order_envelope.order.trade_uuid));
 
         let store = FatCrabTakerBuyDataStore {
-            trade_uuid,
+            order_envelope: order_envelope.to_owned(),
             btc_rx_addr: btc_rx_addr.to_string(),
             peer_btc_txid: None,
             trade_rsp_envelope: None,
@@ -74,7 +77,7 @@ impl FatCrabTakerBuyData {
     ) -> Result<(Uuid, Self), FatCrabError> {
         let json = Persister::restore(&data_path)?;
         let store = serde_json::from_str::<FatCrabTakerBuyDataStore>(&json)?;
-        let trade_uuid = store.trade_uuid;
+        let trade_uuid = store.order_envelope.order.trade_uuid;
 
         let store: Arc<RwLock<FatCrabTakerBuyDataStore>> = Arc::new(RwLock::new(store));
         let generic_store: Arc<RwLock<dyn SerdeGenericTrait + 'static>> = store.clone();
@@ -104,6 +107,10 @@ impl FatCrabTakerBuyData {
                 panic!("Error writing store - {}", error);
             }
         }
+    }
+
+    pub(crate) fn order_envelope(&self) -> FatCrabOrderEnvelope {
+        self.read_store().order_envelope.clone()
     }
 
     pub(crate) fn btc_rx_addr(&self) -> Address {
@@ -154,7 +161,7 @@ impl FatCrabTakerBuyData {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct FatCrabTakerSellDataStore {
-    trade_uuid: Uuid,
+    order_envelope: FatCrabOrderEnvelope,
     fatcrab_rx_addr: String,
     btc_funds_id: Uuid,
     peer_envelope: Option<FatCrabPeerEnvelope>,
@@ -175,15 +182,17 @@ pub(crate) struct FatCrabTakerSellData {
 
 impl FatCrabTakerSellData {
     pub(crate) fn new(
-        trade_uuid: Uuid,
+        order_envelope: &FatCrabOrderEnvelope,
         fatcrab_rx_addr: impl AsRef<str>,
         btc_funds_id: Uuid,
         dir_path: impl AsRef<Path>,
     ) -> Self {
-        let data_path = dir_path.as_ref().join(format!("{}.json", trade_uuid));
+        let data_path = dir_path
+            .as_ref()
+            .join(format!("{}.json", order_envelope.order.trade_uuid));
 
         let store = FatCrabTakerSellDataStore {
-            trade_uuid,
+            order_envelope: order_envelope.to_owned(),
             fatcrab_rx_addr: fatcrab_rx_addr.as_ref().to_owned(),
             btc_funds_id,
             peer_envelope: None,
@@ -201,7 +210,7 @@ impl FatCrabTakerSellData {
     pub(crate) fn restore(data_path: impl AsRef<Path>) -> Result<(Uuid, Self), FatCrabError> {
         let json = Persister::restore(&data_path)?;
         let store = serde_json::from_str::<FatCrabTakerSellDataStore>(&json)?;
-        let trade_uuid = store.trade_uuid;
+        let trade_uuid = store.order_envelope.order.trade_uuid;
 
         let store: Arc<RwLock<FatCrabTakerSellDataStore>> = Arc::new(RwLock::new(store));
         let generic_store: Arc<RwLock<dyn SerdeGenericTrait + 'static>> = store.clone();
@@ -230,6 +239,10 @@ impl FatCrabTakerSellData {
                 panic!("Error writing store - {}", error);
             }
         }
+    }
+
+    pub(crate) fn order_envelope(&self) -> FatCrabOrderEnvelope {
+        self.read_store().order_envelope.clone()
     }
 
     pub(crate) fn fatcrab_rx_addr(&self) -> String {

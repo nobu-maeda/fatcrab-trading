@@ -11,13 +11,14 @@ use crate::{
     common::{parse_address, SerdeGenericTrait},
     error::FatCrabError,
     offer::FatCrabOfferEnvelope,
+    order::FatCrabOrder,
     peer::FatCrabPeerEnvelope,
     persist::std::Persister,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct FatCrabMakerBuyDataStore {
-    trade_uuid: Uuid,
+    order: FatCrabOrder,
     fatcrab_rx_addr: String,
     btc_funds_id: Uuid,
     peer_btc_addr: Option<String>,
@@ -41,16 +42,16 @@ pub(crate) struct FatCrabMakerBuyData {
 
 impl FatCrabMakerBuyData {
     pub(crate) fn new(
-        trade_uuid: Uuid,
+        order: &FatCrabOrder,
         network: Network,
         fatcrab_rx_addr: impl AsRef<str>,
         btc_funds_id: Uuid,
         dir_path: impl AsRef<Path>,
     ) -> Self {
-        let data_path = dir_path.as_ref().join(format!("{}.json", trade_uuid));
+        let data_path = dir_path.as_ref().join(format!("{}.json", order.trade_uuid));
 
         let store = FatCrabMakerBuyDataStore {
-            trade_uuid,
+            order: order.to_owned(),
             fatcrab_rx_addr: fatcrab_rx_addr.as_ref().to_owned(),
             btc_funds_id,
             peer_btc_addr: None,
@@ -77,7 +78,7 @@ impl FatCrabMakerBuyData {
     ) -> Result<(Uuid, Self), FatCrabError> {
         let json = Persister::restore(&data_path)?;
         let store = serde_json::from_str::<FatCrabMakerBuyDataStore>(&json)?;
-        let trade_uuid = store.trade_uuid;
+        let trade_uuid = store.order.trade_uuid;
 
         let store: Arc<RwLock<FatCrabMakerBuyDataStore>> = Arc::new(RwLock::new(store));
         let generic_store: Arc<RwLock<dyn SerdeGenericTrait + 'static>> = store.clone();
@@ -106,6 +107,10 @@ impl FatCrabMakerBuyData {
                 panic!("Error writing store - {}", error);
             }
         }
+    }
+
+    pub(crate) fn order(&self) -> FatCrabOrder {
+        self.read_store().order.to_owned()
     }
 
     pub(crate) fn fatcrab_rx_addr(&self) -> String {
@@ -165,7 +170,7 @@ impl FatCrabMakerBuyData {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct FatCrabMakerSellDataStore {
-    trade_uuid: Uuid,
+    order: FatCrabOrder,
     btc_rx_addr: String,
     peer_btc_txid: Option<Txid>,
     offer_envelopes: Vec<FatCrabOfferEnvelope>,
@@ -188,15 +193,15 @@ pub(crate) struct FatCrabMakerSellData {
 
 impl FatCrabMakerSellData {
     pub(crate) fn new(
-        trade_uuid: Uuid,
+        order: &FatCrabOrder,
         network: Network,
         btc_rx_addr: Address,
         dir_path: impl AsRef<Path>,
     ) -> Self {
-        let data_path = dir_path.as_ref().join(format!("{}.json", trade_uuid));
+        let data_path = dir_path.as_ref().join(format!("{}.json", order.trade_uuid));
 
         let store = FatCrabMakerSellDataStore {
-            trade_uuid,
+            order: order.to_owned(),
             btc_rx_addr: btc_rx_addr.to_string(),
             peer_btc_txid: None,
             offer_envelopes: Vec::new(),
@@ -222,7 +227,7 @@ impl FatCrabMakerSellData {
     ) -> Result<(Uuid, Self), FatCrabError> {
         let json = Persister::restore(&data_path)?;
         let store = serde_json::from_str::<FatCrabMakerSellDataStore>(&json)?;
-        let trade_uuid = store.trade_uuid;
+        let trade_uuid = store.order.trade_uuid;
 
         let store: Arc<RwLock<FatCrabMakerSellDataStore>> = Arc::new(RwLock::new(store));
         let generic_store: Arc<RwLock<dyn SerdeGenericTrait + 'static>> = store.clone();
@@ -251,6 +256,10 @@ impl FatCrabMakerSellData {
                 panic!("Error writing store - {}", error);
             }
         }
+    }
+
+    pub(crate) fn order(&self) -> FatCrabOrder {
+        self.read_store().order.to_owned()
     }
 
     pub(crate) fn btc_rx_addr(&self) -> Address {

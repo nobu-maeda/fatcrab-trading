@@ -104,6 +104,15 @@ impl<OrderType> FatCrabTakerAccess<OrderType> {
         rsp_rx.await.unwrap()
     }
 
+    pub async fn get_order_details(&self) -> Result<FatCrabOrderEnvelope, FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<FatCrabOrderEnvelope, FatCrabError>>();
+        self.tx
+            .send(FatCrabTakerRequest::GetOrderDetails { rsp_tx })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
     pub async fn query_peer_msg(&self) -> Result<Option<FatCrabPeerEnvelope>, FatCrabError> {
         let (rsp_tx, rsp_rx) =
             oneshot::channel::<Result<Option<FatCrabPeerEnvelope>, FatCrabError>>();
@@ -312,6 +321,9 @@ enum FatCrabTakerRequest {
     TakeOrder {
         rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
     },
+    GetOrderDetails {
+        rsp_tx: oneshot::Sender<Result<FatCrabOrderEnvelope, FatCrabError>>,
+    },
     QueryTradeRsp {
         rsp_tx: oneshot::Sender<Result<Option<FatCrabTradeRspEnvelope>, FatCrabError>>,
     },
@@ -445,6 +457,9 @@ impl FatCrabTakerActor {
                         FatCrabTakerRequest::TakeOrder { rsp_tx } => {
                             self.take_order(rsp_tx).await;
                         }
+                        FatCrabTakerRequest::GetOrderDetails { rsp_tx } => {
+                            self.get_order_details(rsp_tx);
+                        }
                         FatCrabTakerRequest::QueryTradeRsp { rsp_tx } => {
                             match self.inner {
                                 FatCrabTakerInnerActor::Buy(ref buy_actor) => {
@@ -529,6 +544,19 @@ impl FatCrabTakerActor {
         } else {
             rsp_tx.send(Ok(())).unwrap();
         }
+    }
+
+    fn get_order_details(
+        &self,
+        rsp_tx: oneshot::Sender<Result<FatCrabOrderEnvelope, FatCrabError>>,
+    ) {
+        let order_envelope = match self.inner {
+            FatCrabTakerInnerActor::Buy(ref buy_actor) => buy_actor.data.order_envelope().clone(),
+            FatCrabTakerInnerActor::Sell(ref sell_actor) => {
+                sell_actor.data.order_envelope().clone()
+            }
+        };
+        rsp_tx.send(Ok(order_envelope)).unwrap();
     }
 
     fn query_peer_msg(
@@ -689,12 +717,7 @@ impl FatCrabTakerBuyActor {
     ) -> Self {
         let btc_rx_addr = purse.get_rx_address().await.unwrap();
 
-        let data = FatCrabTakerBuyData::new(
-            order_envelope.order.trade_uuid,
-            purse.network,
-            btc_rx_addr,
-            dir_path,
-        );
+        let data = FatCrabTakerBuyData::new(order_envelope, purse.network, btc_rx_addr, dir_path);
 
         Self {
             trade_uuid: order_envelope.order.trade_uuid,
@@ -857,7 +880,7 @@ impl FatCrabTakerSellActor {
         };
 
         let data = FatCrabTakerSellData::new(
-            order_envelope.order.trade_uuid,
+            order_envelope,
             fatcrab_rx_addr.clone(),
             btc_funds_id,
             dir_path,
