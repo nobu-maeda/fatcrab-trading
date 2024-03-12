@@ -1,25 +1,28 @@
-use std::marker::PhantomData;
-use std::path::Path;
-use std::str::FromStr;
+use log::{error, warn};
+use std::{marker::PhantomData, path::Path, str::FromStr};
 
 use bitcoin::{Address, Txid};
-use crusty_n3xb::offer::OfferEnvelope;
-use crusty_n3xb::peer_msg::PeerEnvelope;
-use log::{error, warn};
-
-use crusty_n3xb::maker::{MakerAccess, MakerNotif};
-use crusty_n3xb::trade_rsp::{TradeResponseBuilder, TradeResponseStatus};
-use tokio::select;
-use tokio::sync::{mpsc, oneshot};
-use tokio::task::JoinError;
+use crusty_n3xb::{
+    maker::{MakerAccess, MakerNotif},
+    offer::OfferEnvelope,
+    peer_msg::PeerEnvelope,
+    trade_rsp::{TradeResponseBuilder, TradeResponseStatus},
+};
+use tokio::{
+    select,
+    sync::{mpsc, oneshot},
+    task::JoinError,
+};
 use uuid::Uuid;
 
-use crate::error::FatCrabError;
-use crate::offer::{FatCrabOffer, FatCrabOfferEnvelope};
-use crate::order::{FatCrabOrder, FatCrabOrderType};
-use crate::peer::{FatCrabPeerEnvelope, FatCrabPeerMessage};
-use crate::purse::PurseAccess;
-use crate::trade_rsp::{FatCrabMakeTradeRspSpecifics, FatCrabTradeRspType};
+use crate::{
+    error::FatCrabError,
+    offer::{FatCrabOffer, FatCrabOfferEnvelope},
+    order::{FatCrabOrder, FatCrabOrderType},
+    peer::{FatCrabPeerEnvelope, FatCrabPeerMessage},
+    purse::PurseAccess,
+    trade_rsp::{FatCrabMakeTradeRspSpecifics, FatCrabTradeRspType},
+};
 
 use super::data::{FatCrabMakerBuyData, FatCrabMakerSellData};
 

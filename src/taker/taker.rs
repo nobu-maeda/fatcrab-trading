@@ -1,6 +1,5 @@
-use std::{marker::PhantomData, path::Path, str::FromStr};
-
 use log::{error, warn};
+use std::{marker::PhantomData, path::Path, str::FromStr};
 
 use bitcoin::{address::Address, Txid};
 use crusty_n3xb::{
