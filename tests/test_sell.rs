@@ -7,7 +7,7 @@ mod test {
 
     use fatcrab_trading::{
         common::BlockchainInfo,
-        maker::FatCrabMakerNotif,
+        maker::{FatCrabMakerNotif, FatCrabMakerState},
         order::{FatCrabOrder, FatCrabOrderType},
         taker::FatCrabTakerNotif,
         trade_rsp::FatCrabTradeRspType,
@@ -111,12 +111,18 @@ mod test {
         // Maker - Create Fatcrab Maker
         let maker = trader_m.new_sell_maker(&order).await.unwrap();
 
+        let maker_state = maker.get_state().await.unwrap();
+        assert!(matches!(maker_state, FatCrabMakerState::New));
+
         // Maker Create channels & register Notif Tx
         let (maker_notif_tx, mut maker_notif_rx) =
             tokio::sync::mpsc::channel::<FatCrabMakerNotif>(5);
         maker.register_notif_tx(maker_notif_tx).await.unwrap();
 
-        maker.post_new_order().await.unwrap();
+        let maker_state = maker.post_new_order().await.unwrap();
+        assert!(matches!(maker_state, FatCrabMakerState::WaitingForOffers));
+        let maker_state = maker.get_state().await.unwrap();
+        assert!(matches!(maker_state, FatCrabMakerState::WaitingForOffers));
 
         // Taker - Query Fatcrab Trade Order
         let orders = trader_t
@@ -158,23 +164,39 @@ mod test {
             }
         };
 
+        assert!(matches!(
+            offer_notif.state,
+            FatCrabMakerState::ReceivedOffer
+        ));
+        let maker_state = maker.get_state().await.unwrap();
+        assert!(matches!(maker_state, FatCrabMakerState::ReceivedOffer));
+
         // Maker - Send Fatcrab Trade Response w/ BTC address
         let trade_rsp_type = FatCrabTradeRspType::Accept;
-        maker
+        let maker_state = maker
             .trade_response(trade_rsp_type, offer_notif.offer_envelope)
             .await
             .unwrap();
+        assert!(matches!(maker_state, FatCrabMakerState::AcceptedOffer));
+        let maker_state = maker.get_state().await.unwrap();
+        assert!(matches!(maker_state, FatCrabMakerState::AcceptedOffer));
 
         // Taker should auto remit BTC, auto peer notify with TxID and FatCrab address
 
         // Maker - Wait for Peer Message
         let maker_notif = maker_notif_rx.recv().await.unwrap();
-        let _btc_txid = match maker_notif {
-            FatCrabMakerNotif::Peer(peer_notif) => peer_notif.peer_envelope.message.txid,
+        let peer_notif = match maker_notif {
+            FatCrabMakerNotif::Peer(peer_notif) => peer_notif,
             _ => {
                 panic!("Maker only expects Peer Message at this point");
             }
         };
+
+        let _btc_txid = peer_notif.peer_envelope.message.txid;
+        assert!(matches!(
+            peer_notif.state,
+            FatCrabMakerState::InboundBtcNotified
+        ));
 
         // Mine several blocks to confirm Bitcoin Tx
         node.generate_blocks(10);
@@ -199,12 +221,17 @@ mod test {
 
         // Maker - User claims Fatcrab remittance, send Peer Message
         let maker_fatcrab_remittance_txid = Uuid::new_v4().to_string();
-        maker
+        let maker_state = maker
             .notify_peer(&maker_fatcrab_remittance_txid)
             .await
             .unwrap();
+        assert!(matches!(maker_state, FatCrabMakerState::NotifiedOutbound));
 
-        maker.trade_complete().await.unwrap();
+        let maker_state = maker.get_state().await.unwrap();
+        assert!(matches!(maker_state, FatCrabMakerState::NotifiedOutbound));
+
+        let maker_state = maker.trade_complete().await.unwrap();
+        assert!(matches!(maker_state, FatCrabMakerState::TradeCompleted));
 
         // Taker - Wait for Fatcrab Peer Message
         let taker_notif = taker_notif_rx.recv().await.unwrap();
