@@ -244,8 +244,7 @@ mod test {
                 _ => panic!("Maker is not a Buy Maker"),
             };
 
-            let (maker_notif_tx, mut maker_notif_rx) =
-                tokio::sync::mpsc::channel::<FatCrabMakerNotif>(5);
+            let (maker_notif_tx, _) = tokio::sync::mpsc::channel::<FatCrabMakerNotif>(5);
             maker.register_notif_tx(maker_notif_tx).await.unwrap();
             trader_m.reconnect().await.unwrap();
 
@@ -315,8 +314,7 @@ mod test {
                 FatCrabTakerAccessEnum::Buy(taker_access) => taker_access,
                 _ => panic!("Taker is not a Buy Taker"),
             };
-            let (taker_notif_tx, mut taker_notif_rx) =
-                tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
+            let (taker_notif_tx, _) = tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
             taker.register_notif_tx(taker_notif_tx).await.unwrap();
             trader_t.reconnect().await.unwrap();
 
@@ -362,9 +360,9 @@ mod test {
             // Maker - Wait for Fatcrab Peer Message
             let maker_notif = maker_notif_rx.recv().await.unwrap();
             match maker_notif {
-                FatCrabMakerNotif::Peer(peer_msg_envelope) => {
+                FatCrabMakerNotif::Peer(peer_notif) => {
                     assert_eq!(
-                        &peer_msg_envelope.message.txid,
+                        &peer_notif.peer_envelope.message.txid,
                         &taker_fatcrab_remittance_txid
                     );
                 }
@@ -389,8 +387,7 @@ mod test {
                 FatCrabMakerAccessEnum::Buy(maker_access) => maker_access,
                 _ => panic!("Maker is not a Buy Maker"),
             };
-            let (maker_notif_tx, mut maker_notif_rx) =
-                tokio::sync::mpsc::channel::<FatCrabMakerNotif>(5);
+            let (maker_notif_tx, _) = tokio::sync::mpsc::channel::<FatCrabMakerNotif>(5);
             maker.register_notif_tx(maker_notif_tx).await.unwrap();
             trader_m.reconnect().await.unwrap();
 
@@ -454,8 +451,7 @@ mod test {
                 FatCrabTakerAccessEnum::Buy(taker_access) => taker_access,
                 _ => panic!("Taker is not a Buy Taker"),
             };
-            let (taker_notif_tx, mut taker_notif_rx) =
-                tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
+            let (taker_notif_tx, _) = tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
             taker.register_notif_tx(taker_notif_tx).await.unwrap();
             trader_t.reconnect().await.unwrap();
 

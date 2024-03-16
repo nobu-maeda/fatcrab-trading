@@ -145,8 +145,8 @@ mod test {
 
         // Maker - Wait for Fatcrab Trader Order to be taken
         let maker_notif = maker_notif_rx.recv().await.unwrap();
-        let offer_envelope = match maker_notif {
-            FatCrabMakerNotif::Offer(offer_envelope) => offer_envelope,
+        let offer_notif = match maker_notif {
+            FatCrabMakerNotif::Offer(offer_notif) => offer_notif,
             _ => {
                 panic!("Maker only expects Buy Offer Notif at this point");
             }
@@ -155,7 +155,7 @@ mod test {
         // Maker - Send Fatcrab Trade Response w/ Fatcrab address
         let trade_rsp_type = FatCrabTradeRspType::Accept;
         maker
-            .trade_response(trade_rsp_type, offer_envelope)
+            .trade_response(trade_rsp_type, offer_notif.offer_envelope)
             .await
             .unwrap();
 
@@ -189,9 +189,9 @@ mod test {
         // Maker - Wait for Fatcrab Peer Message
         let maker_notif = maker_notif_rx.recv().await.unwrap();
         match maker_notif {
-            FatCrabMakerNotif::Peer(peer_msg_envelope) => {
+            FatCrabMakerNotif::Peer(peer_notif) => {
                 assert_eq!(
-                    &peer_msg_envelope.message.txid,
+                    &peer_notif.peer_envelope.message.txid,
                     &taker_fatcrab_remittance_txid
                 );
             }

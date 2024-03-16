@@ -261,8 +261,7 @@ mod test {
                 _ => panic!("Maker is not a Sell Maker"),
             };
 
-            let (maker_notif_tx, mut maker_notif_rx) =
-                tokio::sync::mpsc::channel::<FatCrabMakerNotif>(5);
+            let (maker_notif_tx, _) = tokio::sync::mpsc::channel::<FatCrabMakerNotif>(5);
             maker.register_notif_tx(maker_notif_tx).await.unwrap();
             trader_m.reconnect().await.unwrap();
 
@@ -294,8 +293,7 @@ mod test {
                 FatCrabTakerAccessEnum::Sell(taker_access) => taker_access,
                 _ => panic!("Taker is not a Sell Taker"),
             };
-            let (taker_notif_tx, mut taker_notif_rx) =
-                tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
+            let (taker_notif_tx, _) = tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
             taker.register_notif_tx(taker_notif_tx).await.unwrap();
             trader_t.reconnect().await.unwrap();
 
@@ -319,7 +317,7 @@ mod test {
 
             let maker_notif = maker_notif_rx.recv().await.unwrap();
             let _ = match maker_notif {
-                FatCrabMakerNotif::Peer(peer_msg_envelope) => peer_msg_envelope.message.txid,
+                FatCrabMakerNotif::Peer(peer_notif) => peer_notif.peer_envelope.message.txid,
                 _ => {
                     panic!("Maker only expects Peer Notif at this point");
                 }
@@ -346,8 +344,7 @@ mod test {
                 FatCrabMakerAccessEnum::Sell(maker_access) => maker_access,
                 _ => panic!("Maker is not a Sell Maker"),
             };
-            let (maker_notif_tx, mut maker_notif_rx) =
-                tokio::sync::mpsc::channel::<FatCrabMakerNotif>(5);
+            let (maker_notif_tx, _) = tokio::sync::mpsc::channel::<FatCrabMakerNotif>(5);
             maker.register_notif_tx(maker_notif_tx).await.unwrap();
             trader_m.reconnect().await.unwrap();
 
@@ -414,8 +411,7 @@ mod test {
                 FatCrabTakerAccessEnum::Sell(taker_access) => taker_access,
                 _ => panic!("Taker is not a Sell Taker"),
             };
-            let (taker_notif_tx, mut taker_notif_rx) =
-                tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
+            let (taker_notif_tx, _) = tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
             taker.register_notif_tx(taker_notif_tx).await.unwrap();
             trader_t.reconnect().await.unwrap();
 
