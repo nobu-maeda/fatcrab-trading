@@ -3,6 +3,7 @@ mod common;
 #[cfg(test)]
 
 mod test {
+    use crusty_n3xb::taker;
     use log::error;
     use secp256k1::SecretKey;
     use std::{fs, net::SocketAddr, str::FromStr, time::Duration};
@@ -15,7 +16,7 @@ mod test {
         common::BlockchainInfo,
         maker::{FatCrabMakerAccessEnum, FatCrabMakerNotif},
         order::{FatCrabOrder, FatCrabOrderType},
-        taker::{FatCrabTakerAccessEnum, FatCrabTakerNotif},
+        taker::{FatCrabTakerAccessEnum, FatCrabTakerNotif, FatCrabTakerState},
         trade_rsp::FatCrabTradeRspType,
         trader::FatCrabTrader,
     };
@@ -293,9 +294,23 @@ mod test {
                 FatCrabTakerAccessEnum::Sell(taker_access) => taker_access,
                 _ => panic!("Taker is not a Sell Taker"),
             };
-            let (taker_notif_tx, _) = tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
+            let (taker_notif_tx, mut taker_notif_rx) =
+                tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
             taker.register_notif_tx(taker_notif_tx).await.unwrap();
             trader_t.reconnect().await.unwrap();
+
+            let taker_notif = taker_notif_rx.recv().await.unwrap();
+            let _ = match taker_notif {
+                FatCrabTakerNotif::TradeRsp(trade_rsp_notif) => match trade_rsp_notif.state {
+                    FatCrabTakerState::NotifiedOutbound => {}
+                    _ => {
+                        panic!("Taker only expects BTC to be auto-remitted and state jumps directly to Notified Outbound at this point");
+                    }
+                },
+                _ => {
+                    panic!("Taker only expects Trade Response at this point");
+                }
+            };
 
             taker.shutdown().await.unwrap();
             trader_t.shutdown().await.unwrap();
@@ -389,7 +404,7 @@ mod test {
 
             let taker_notif = taker_notif_rx.recv().await.unwrap();
             let _fatcrab_txid = match taker_notif {
-                FatCrabTakerNotif::Peer(peer_msg_envelope) => peer_msg_envelope.message.txid,
+                FatCrabTakerNotif::Peer(peer_notif) => peer_notif.peer_envelope.message.txid,
                 _ => {
                     panic!("Taker only expects Peer Message at this point");
                 }

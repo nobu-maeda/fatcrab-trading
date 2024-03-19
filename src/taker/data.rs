@@ -16,9 +16,12 @@ use crate::{
     trade_rsp::FatCrabTradeRspEnvelope,
 };
 
+use super::state::FatCrabTakerState;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct FatCrabTakerBuyDataStore {
     order_envelope: FatCrabOrderEnvelope,
+    state: FatCrabTakerState,
     btc_rx_addr: String,
     peer_btc_txid: Option<Txid>,
     trade_rsp_envelope: Option<FatCrabTradeRspEnvelope>,
@@ -52,6 +55,7 @@ impl FatCrabTakerBuyData {
 
         let store = FatCrabTakerBuyDataStore {
             order_envelope: order_envelope.to_owned(),
+            state: FatCrabTakerState::New,
             btc_rx_addr: btc_rx_addr.to_string(),
             peer_btc_txid: None,
             trade_rsp_envelope: None,
@@ -113,6 +117,10 @@ impl FatCrabTakerBuyData {
         self.read_store().order_envelope.clone()
     }
 
+    pub(crate) fn state(&self) -> FatCrabTakerState {
+        self.read_store().state.to_owned()
+    }
+
     pub(crate) fn btc_rx_addr(&self) -> Address {
         let addr_string = self.read_store().btc_rx_addr.clone();
         parse_address(addr_string, self.network)
@@ -132,6 +140,11 @@ impl FatCrabTakerBuyData {
 
     pub(crate) fn trade_completed(&self) -> bool {
         self.read_store().trade_completed
+    }
+
+    pub(crate) fn set_state(&self, state: FatCrabTakerState) {
+        self.write_store().state = state;
+        self.persister.queue();
     }
 
     pub(crate) fn set_peer_btc_txid(&self, txid: Txid) {
@@ -162,6 +175,7 @@ impl FatCrabTakerBuyData {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct FatCrabTakerSellDataStore {
     order_envelope: FatCrabOrderEnvelope,
+    state: FatCrabTakerState,
     fatcrab_rx_addr: String,
     btc_funds_id: Uuid,
     peer_envelope: Option<FatCrabPeerEnvelope>,
@@ -193,6 +207,7 @@ impl FatCrabTakerSellData {
 
         let store = FatCrabTakerSellDataStore {
             order_envelope: order_envelope.to_owned(),
+            state: FatCrabTakerState::New,
             fatcrab_rx_addr: fatcrab_rx_addr.as_ref().to_owned(),
             btc_funds_id,
             peer_envelope: None,
@@ -245,6 +260,10 @@ impl FatCrabTakerSellData {
         self.read_store().order_envelope.clone()
     }
 
+    pub(crate) fn state(&self) -> FatCrabTakerState {
+        self.read_store().state.to_owned()
+    }
+
     pub(crate) fn fatcrab_rx_addr(&self) -> String {
         self.read_store().fatcrab_rx_addr.to_owned()
     }
@@ -259,6 +278,11 @@ impl FatCrabTakerSellData {
 
     pub(crate) fn trade_completed(&self) -> bool {
         self.read_store().trade_completed
+    }
+
+    pub(crate) fn set_state(&self, state: FatCrabTakerState) {
+        self.write_store().state = state;
+        self.persister.queue();
     }
 
     pub(crate) fn set_peer_envelope(&self, peer_envelope: FatCrabPeerEnvelope) {

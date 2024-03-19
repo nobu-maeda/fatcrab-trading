@@ -178,12 +178,14 @@ mod test {
         // Taker - Wait for Fatcrab Trade Response
         let taker_notif = taker_notif_rx.recv().await.unwrap();
         let maker_remitted_fatcrab_acct_id_string = match taker_notif {
-            FatCrabTakerNotif::TradeRsp(trade_rsp_envelope) => match trade_rsp_envelope.trade_rsp {
-                FatCrabTradeRsp::Accept { receive_address } => receive_address,
-                _ => {
-                    panic!("Taker only expects Accepted Trade Response at this point");
+            FatCrabTakerNotif::TradeRsp(trade_rsp_notif) => {
+                match trade_rsp_notif.trade_rsp_envelope.trade_rsp {
+                    FatCrabTradeRsp::Accept { receive_address } => receive_address,
+                    _ => {
+                        panic!("Taker only expects Accepted Trade Response at this point");
+                    }
                 }
-            },
+            }
             _ => {
                 panic!("Taker only expects Accepted Trade Response at this point");
             }
@@ -237,7 +239,7 @@ mod test {
         // Taker - Wait for Fatcrab Peer Message
         let taker_notif = taker_notif_rx.recv().await.unwrap();
         let _btc_txid = match taker_notif {
-            FatCrabTakerNotif::Peer(peer_msg_envelope) => peer_msg_envelope.message.txid,
+            FatCrabTakerNotif::Peer(peer_notif) => peer_notif.peer_envelope.message.txid,
             _ => {
                 panic!("Taker only expects Peer Message at this point");
             }

@@ -236,9 +236,9 @@ mod test {
         // Taker - Wait for Fatcrab Peer Message
         let taker_notif = taker_notif_rx.recv().await.unwrap();
         match taker_notif {
-            FatCrabTakerNotif::Peer(peer_msg_envelope) => {
+            FatCrabTakerNotif::Peer(peer_notif) => {
                 assert_eq!(
-                    &peer_msg_envelope.message.txid,
+                    &peer_notif.peer_envelope.message.txid,
                     &maker_fatcrab_remittance_txid
                 );
             }
