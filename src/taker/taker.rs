@@ -82,8 +82,7 @@ impl FatCrabTakerAccess<TakerBuy> {
                 txid: txid.into(),
                 rsp_tx,
             })
-            .await
-            .unwrap();
+            .await?;
         rsp_rx.await.unwrap()
     }
 
@@ -92,8 +91,7 @@ impl FatCrabTakerAccess<TakerBuy> {
             oneshot::channel::<Result<Option<FatCrabTradeRspEnvelope>, FatCrabError>>();
         self.tx
             .send(FatCrabTakerRequest::QueryTradeRsp { rsp_tx })
-            .await
-            .unwrap();
+            .await?;
         rsp_rx.await.unwrap()
     }
 
@@ -101,8 +99,7 @@ impl FatCrabTakerAccess<TakerBuy> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<u32, FatCrabError>>();
         self.tx
             .send(FatCrabTakerRequest::CheckBtcTxConf { rsp_tx })
-            .await
-            .unwrap();
+            .await?;
         rsp_rx.await.unwrap()
     }
 }
@@ -114,8 +111,7 @@ impl<OrderType> FatCrabTakerAccess<OrderType> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<FatCrabTakerState, FatCrabError>>();
         self.tx
             .send(FatCrabTakerRequest::TakeOrder { rsp_tx })
-            .await
-            .unwrap();
+            .await?;
         rsp_rx.await.unwrap()
     }
 
@@ -123,8 +119,7 @@ impl<OrderType> FatCrabTakerAccess<OrderType> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<FatCrabOrderEnvelope, FatCrabError>>();
         self.tx
             .send(FatCrabTakerRequest::GetOrderDetails { rsp_tx })
-            .await
-            .unwrap();
+            .await?;
         rsp_rx.await.unwrap()
     }
 
@@ -132,8 +127,7 @@ impl<OrderType> FatCrabTakerAccess<OrderType> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<FatCrabTakerState, FatCrabError>>();
         self.tx
             .send(FatCrabTakerRequest::GetState { rsp_tx })
-            .await
-            .unwrap();
+            .await?;
         rsp_rx.await.unwrap()
     }
 
@@ -142,8 +136,7 @@ impl<OrderType> FatCrabTakerAccess<OrderType> {
             oneshot::channel::<Result<Option<FatCrabPeerEnvelope>, FatCrabError>>();
         self.tx
             .send(FatCrabTakerRequest::QueryPeerMsg { rsp_tx })
-            .await
-            .unwrap();
+            .await?;
         rsp_rx.await.unwrap()
     }
 
@@ -151,8 +144,7 @@ impl<OrderType> FatCrabTakerAccess<OrderType> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<FatCrabTakerState, FatCrabError>>();
         self.tx
             .send(FatCrabTakerRequest::TradeComplete { rsp_tx })
-            .await
-            .unwrap();
+            .await?;
         rsp_rx.await.unwrap()
     }
 
@@ -171,8 +163,7 @@ impl<OrderType> FatCrabTakerAccess<OrderType> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
         self.tx
             .send(FatCrabTakerRequest::RegisterNotifTx { tx, rsp_tx })
-            .await
-            .unwrap();
+            .await?;
         rsp_rx.await.unwrap()
     }
 
@@ -180,8 +171,7 @@ impl<OrderType> FatCrabTakerAccess<OrderType> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
         self.tx
             .send(FatCrabTakerRequest::UnregisterNotifTx { rsp_tx })
-            .await
-            .unwrap();
+            .await?;
         rsp_rx.await.unwrap()
     }
 }

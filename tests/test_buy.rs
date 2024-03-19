@@ -9,7 +9,7 @@ mod test {
         common::BlockchainInfo,
         maker::{FatCrabMakerNotif, FatCrabMakerState},
         order::{FatCrabOrder, FatCrabOrderType},
-        taker::FatCrabTakerNotif,
+        taker::{FatCrabTakerNotif, FatCrabTakerState},
         trade_rsp::{FatCrabTradeRsp, FatCrabTradeRspType},
         trader::FatCrabTrader,
     };
@@ -143,11 +143,17 @@ mod test {
         // Taker - Create Fatcrab Take Trader & Take Trade Order
         let taker = trader_t.new_buy_taker(&orders[0]).await.unwrap();
 
+        let taker_state = taker.get_state().await.unwrap();
+        assert!(matches!(taker_state, FatCrabTakerState::New));
+
         let (taker_notif_tx, mut taker_notif_rx) =
             tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
         taker.register_notif_tx(taker_notif_tx).await.unwrap();
 
-        taker.take_order().await.unwrap();
+        let taker_state = taker.take_order().await.unwrap();
+        assert!(matches!(taker_state, FatCrabTakerState::SubmittedOffer));
+        let taker_state = taker.get_state().await.unwrap();
+        assert!(matches!(taker_state, FatCrabTakerState::SubmittedOffer));
 
         // Maker - Wait for Fatcrab Trader Order to be taken
         let maker_notif = maker_notif_rx.recv().await.unwrap();
@@ -177,19 +183,26 @@ mod test {
 
         // Taker - Wait for Fatcrab Trade Response
         let taker_notif = taker_notif_rx.recv().await.unwrap();
-        let maker_remitted_fatcrab_acct_id_string = match taker_notif {
-            FatCrabTakerNotif::TradeRsp(trade_rsp_notif) => {
-                match trade_rsp_notif.trade_rsp_envelope.trade_rsp {
-                    FatCrabTradeRsp::Accept { receive_address } => receive_address,
-                    _ => {
-                        panic!("Taker only expects Accepted Trade Response at this point");
-                    }
-                }
-            }
+        let trade_rsp_notif = match taker_notif {
+            FatCrabTakerNotif::TradeRsp(trade_rsp_notif) => trade_rsp_notif,
             _ => {
-                panic!("Taker only expects Accepted Trade Response at this point");
+                panic!("Taker only expects Trade Response at this point");
             }
         };
+        assert!(matches!(
+            trade_rsp_notif.state,
+            FatCrabTakerState::OfferAccepted
+        ));
+        let taker_state = taker.get_state().await.unwrap();
+        assert!(matches!(taker_state, FatCrabTakerState::OfferAccepted));
+
+        let maker_remitted_fatcrab_acct_id_string =
+            match trade_rsp_notif.trade_rsp_envelope.trade_rsp {
+                FatCrabTradeRsp::Accept { receive_address } => receive_address,
+                _ => {
+                    panic!("Taker only expects Accepted Trade Response at this point");
+                }
+            };
         assert_eq!(
             maker_remitted_fatcrab_acct_id_string,
             maker_receive_fatcrab_addr
@@ -199,10 +212,13 @@ mod test {
 
         // Taker - User claims Fatcrab remittance, send Peer Message with Bitcoin address
         let taker_fatcrab_remittance_txid = Uuid::new_v4().to_string();
-        taker
+        let taker_state = taker
             .notify_peer(&taker_fatcrab_remittance_txid)
             .await
             .unwrap();
+        assert!(matches!(taker_state, FatCrabTakerState::NotifiedOutbound));
+        let taker_state = taker.get_state().await.unwrap();
+        assert!(matches!(taker_state, FatCrabTakerState::NotifiedOutbound));
 
         // Maker - Wait for Fatcrab Peer Message
         let maker_notif = maker_notif_rx.recv().await.unwrap();
@@ -238,12 +254,19 @@ mod test {
 
         // Taker - Wait for Fatcrab Peer Message
         let taker_notif = taker_notif_rx.recv().await.unwrap();
-        let _btc_txid = match taker_notif {
-            FatCrabTakerNotif::Peer(peer_notif) => peer_notif.peer_envelope.message.txid,
+        let peer_notif = match taker_notif {
+            FatCrabTakerNotif::Peer(peer_notif) => peer_notif,
             _ => {
                 panic!("Taker only expects Peer Message at this point");
             }
         };
+        assert_eq!(
+            matches!(peer_notif.state, FatCrabTakerState::InboundBtcNotified),
+            true
+        );
+        let taker_state = taker.get_state().await.unwrap();
+        assert!(matches!(taker_state, FatCrabTakerState::InboundBtcNotified));
+        let _btc_txid = peer_notif.peer_envelope.message.txid;
 
         // Mine several blocks to confirm Bitcoin Tx
         node.generate_blocks(10);
@@ -262,7 +285,8 @@ mod test {
         assert!(trader_m_balance < MAKER_BALANCE - (PURCHASE_AMOUNT * PURCHASE_PRICE) as u64);
 
         // Taker - Trade Completion
-        taker.trade_complete().await.unwrap();
+        let taker_state = taker.trade_complete().await.unwrap();
+        assert!(matches!(taker_state, FatCrabTakerState::TradeCompleted));
 
         // Trader Shutdown
         trader_m.shutdown().await.unwrap();

@@ -3,7 +3,6 @@ mod common;
 #[cfg(test)]
 
 mod test {
-    use crusty_n3xb::taker;
     use log::error;
     use secp256k1::SecretKey;
     use std::{fs, net::SocketAddr, str::FromStr, time::Duration};

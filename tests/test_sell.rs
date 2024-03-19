@@ -9,7 +9,7 @@ mod test {
         common::BlockchainInfo,
         maker::{FatCrabMakerNotif, FatCrabMakerState},
         order::{FatCrabOrder, FatCrabOrderType},
-        taker::FatCrabTakerNotif,
+        taker::{FatCrabTakerNotif, FatCrabTakerState},
         trade_rsp::FatCrabTradeRspType,
         trader::FatCrabTrader,
     };
@@ -149,11 +149,17 @@ mod test {
             .await
             .unwrap();
 
+        let taker_state = taker.get_state().await.unwrap();
+        assert!(matches!(taker_state, FatCrabTakerState::New));
+
         let (taker_notif_tx, mut taker_notif_rx) =
             tokio::sync::mpsc::channel::<FatCrabTakerNotif>(5);
         taker.register_notif_tx(taker_notif_tx).await.unwrap();
 
-        taker.take_order().await.unwrap();
+        let taker_state = taker.take_order().await.unwrap();
+        assert!(matches!(taker_state, FatCrabTakerState::SubmittedOffer));
+        let taker_state = taker.get_state().await.unwrap();
+        assert!(matches!(taker_state, FatCrabTakerState::SubmittedOffer));
 
         // Maker - Wait for Fatcrab Trader Order to be taken
         let maker_notif = maker_notif_rx.recv().await.unwrap();
@@ -182,6 +188,19 @@ mod test {
         assert!(matches!(maker_state, FatCrabMakerState::AcceptedOffer));
 
         // Taker should auto remit BTC, auto peer notify with TxID and FatCrab address
+        let taker_notif = taker_notif_rx.recv().await.unwrap();
+        let trade_rsp_notif = match taker_notif {
+            FatCrabTakerNotif::TradeRsp(trade_rsp_notif) => trade_rsp_notif,
+            _ => {
+                panic!("Taker only expects Trade Response Notif at this point");
+            }
+        };
+        assert!(matches!(
+            trade_rsp_notif.state,
+            FatCrabTakerState::NotifiedOutbound
+        ));
+        let taker_state = taker.get_state().await.unwrap();
+        assert!(matches!(taker_state, FatCrabTakerState::NotifiedOutbound));
 
         // Maker - Wait for Peer Message
         let maker_notif = maker_notif_rx.recv().await.unwrap();
@@ -235,19 +254,26 @@ mod test {
 
         // Taker - Wait for Fatcrab Peer Message
         let taker_notif = taker_notif_rx.recv().await.unwrap();
-        match taker_notif {
-            FatCrabTakerNotif::Peer(peer_notif) => {
-                assert_eq!(
-                    &peer_notif.peer_envelope.message.txid,
-                    &maker_fatcrab_remittance_txid
-                );
-            }
+        let peer_notif = match taker_notif {
+            FatCrabTakerNotif::Peer(peer_notif) => peer_notif,
             _ => {
                 panic!("Taker only expects Peer Message at this point");
             }
-        }
+        };
 
-        taker.trade_complete().await.unwrap();
+        assert_eq!(
+            &peer_notif.peer_envelope.message.txid,
+            &maker_fatcrab_remittance_txid
+        );
+        assert_eq!(
+            matches!(peer_notif.state, FatCrabTakerState::InboundFcNotified),
+            true
+        );
+        let taker_state = taker.get_state().await.unwrap();
+        assert!(matches!(taker_state, FatCrabTakerState::InboundFcNotified));
+
+        let taker_state = taker.trade_complete().await.unwrap();
+        assert!(matches!(taker_state, FatCrabTakerState::TradeCompleted));
 
         // Trader Shutdown
         trader_m.shutdown().await.unwrap();
