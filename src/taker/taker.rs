@@ -920,7 +920,6 @@ impl FatCrabTakerBuyActor {
     ) {
         let new_state = FatCrabTakerState::TradeCompleted;
         self.data.set_state(new_state.clone());
-        self.data.set_trade_completed();
         self.data.terminate();
 
         match self.n3xb_taker.trade_complete().await {
@@ -1157,7 +1156,6 @@ impl FatCrabTakerSellActor {
     ) {
         let new_state = FatCrabTakerState::TradeCompleted;
         self.data.set_state(new_state.clone());
-        self.data.set_trade_completed();
         self.data.terminate();
 
         match self.n3xb_taker.trade_complete().await {

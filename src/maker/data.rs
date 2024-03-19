@@ -27,7 +27,6 @@ struct FatCrabMakerBuyDataStore {
     peer_btc_addr: Option<String>,
     offer_envelopes: Vec<FatCrabOfferEnvelope>,
     peer_envelope: Option<FatCrabPeerEnvelope>,
-    trade_completed: bool,
 }
 
 #[typetag::serde(name = "fatcrab_maker_buy_data")]
@@ -61,7 +60,6 @@ impl FatCrabMakerBuyData {
             peer_btc_addr: None,
             offer_envelopes: Vec::new(),
             peer_envelope: None,
-            trade_completed: false,
         };
 
         let store: Arc<RwLock<FatCrabMakerBuyDataStore>> = Arc::new(RwLock::new(store));
@@ -147,10 +145,6 @@ impl FatCrabMakerBuyData {
         self.read_store().peer_envelope.to_owned()
     }
 
-    pub(crate) fn trade_completed(&self) -> bool {
-        self.read_store().trade_completed
-    }
-
     pub(crate) fn set_state(&self, state: FatCrabMakerState) {
         self.write_store().state = state;
         self.persister.queue();
@@ -171,11 +165,6 @@ impl FatCrabMakerBuyData {
         self.persister.queue();
     }
 
-    pub(crate) fn set_trade_completed(&self) {
-        self.write_store().trade_completed = true;
-        self.persister.queue();
-    }
-
     pub(crate) fn terminate(self) {
         self.persister.terminate();
     }
@@ -189,7 +178,6 @@ struct FatCrabMakerSellDataStore {
     peer_btc_txid: Option<Txid>,
     offer_envelopes: Vec<FatCrabOfferEnvelope>,
     peer_envelope: Option<FatCrabPeerEnvelope>,
-    trade_completed: bool,
 }
 
 #[typetag::serde(name = "fatcrab_maker_sell_data")]
@@ -221,7 +209,6 @@ impl FatCrabMakerSellData {
             peer_btc_txid: None,
             offer_envelopes: Vec::new(),
             peer_envelope: None,
-            trade_completed: false,
         };
 
         let store: Arc<RwLock<FatCrabMakerSellDataStore>> = Arc::new(RwLock::new(store));
@@ -298,10 +285,6 @@ impl FatCrabMakerSellData {
         self.read_store().peer_envelope.to_owned()
     }
 
-    pub(crate) fn trade_completed(&self) -> bool {
-        self.read_store().trade_completed
-    }
-
     pub(crate) fn set_state(&self, state: FatCrabMakerState) {
         self.write_store().state = state;
         self.persister.queue();
@@ -319,11 +302,6 @@ impl FatCrabMakerSellData {
 
     pub(crate) fn set_peer_envelope(&self, envelope: FatCrabPeerEnvelope) {
         self.write_store().peer_envelope = Some(envelope);
-        self.persister.queue();
-    }
-
-    pub(crate) fn set_trade_completed(&self) {
-        self.write_store().trade_completed = true;
         self.persister.queue();
     }
 

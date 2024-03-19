@@ -1000,7 +1000,6 @@ impl FatCrabMakerBuyActor {
         self,
         rsp_tx: oneshot::Sender<Result<FatCrabMakerState, FatCrabError>>,
     ) {
-        self.data.set_trade_completed();
         self.data.set_state(FatCrabMakerState::TradeCompleted);
         self.data.terminate();
 
@@ -1161,7 +1160,6 @@ impl FatCrabMakerSellActor {
         self,
         rsp_tx: oneshot::Sender<Result<FatCrabMakerState, FatCrabError>>,
     ) {
-        self.data.set_trade_completed();
         self.data.set_state(FatCrabMakerState::TradeCompleted);
         self.data.terminate();
 
