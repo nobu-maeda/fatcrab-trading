@@ -722,6 +722,7 @@ impl FatCrabMakerActor {
             Ok(_) => {
                 if let Some(notif_tx) = &self.notif_tx {
                     let fatcrab_offer_envelope = FatCrabOfferEnvelope {
+                        pubkey: offer_envelope.pubkey.to_string(),
                         envelope: offer_envelope,
                     };
 
