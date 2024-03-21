@@ -613,6 +613,7 @@ impl FatCrabTrader {
             .into_iter()
             .map(|envelope| FatCrabOrderEnvelope {
                 order: FatCrabOrder::from_n3xb_order(envelope.order.clone()).unwrap(),
+                pubkey: envelope.pubkey.to_string(),
                 envelope,
             })
             .collect();

@@ -32,6 +32,7 @@ pub enum FatCrabOrderType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FatCrabOrderEnvelope {
     pub order: FatCrabOrder,
+    pub pubkey: String,
     pub(crate) envelope: OrderEnvelope,
 }
 
