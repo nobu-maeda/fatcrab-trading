@@ -86,6 +86,14 @@ impl FatCrabMakerAccess<MakerBuy> {
 }
 
 impl FatCrabMakerAccess<MakerSell> {
+    pub async fn get_peer_btc_txid(&self) -> Result<Option<String>, FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<Option<String>, FatCrabError>>();
+        self.tx
+            .send(FatCrabMakerRequest::GetPeerBtcTxid { rsp_tx })
+            .await?;
+        rsp_rx.await.unwrap()
+    }
+
     pub async fn check_btc_tx_confirmation(&self) -> Result<u32, FatCrabError> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<u32, FatCrabError>>();
         self.tx
@@ -362,6 +370,9 @@ enum FatCrabMakerRequest {
     GetOrderDetails {
         rsp_tx: oneshot::Sender<Result<FatCrabOrder, FatCrabError>>,
     },
+    GetPeerBtcTxid {
+        rsp_tx: oneshot::Sender<Result<Option<String>, FatCrabError>>,
+    },
     QueryOffers {
         rsp_tx: oneshot::Sender<Result<Vec<FatCrabOfferEnvelope>, FatCrabError>>,
     },
@@ -507,6 +518,9 @@ impl FatCrabMakerActor {
                         FatCrabMakerRequest::GetState { rsp_tx } => {
                             self.get_state(rsp_tx);
                         },
+                        FatCrabMakerRequest::GetPeerBtcTxid { rsp_tx } => {
+                            self.get_peer_btc_txid(rsp_tx);
+                        },
                         FatCrabMakerRequest::QueryOffers { rsp_tx } => {
                             self.query_offers(rsp_tx);
                         },
@@ -625,6 +639,24 @@ impl FatCrabMakerActor {
             FatCrabMakerInnerActor::Sell(ref sell_actor) => sell_actor.data.state(),
         };
         rsp_tx.send(Ok(state)).unwrap();
+    }
+
+    fn get_peer_btc_txid(&self, rsp_tx: oneshot::Sender<Result<Option<String>, FatCrabError>>) {
+        match self.inner {
+            FatCrabMakerInnerActor::Buy(ref _buy_actor) => {
+                let error = FatCrabError::Simple {
+                    description: "Buy Maker does not have peer_btc_txid".to_string(),
+                };
+                rsp_tx.send(Err(error)).unwrap();
+            }
+            FatCrabMakerInnerActor::Sell(ref sell_actor) => {
+                let peer_btc_txid = match sell_actor.data.peer_btc_txid() {
+                    Some(txid) => Some(txid.to_string()),
+                    None => None,
+                };
+                rsp_tx.send(Ok(peer_btc_txid)).unwrap();
+            }
+        };
     }
 
     fn query_offers(
