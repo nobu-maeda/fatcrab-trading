@@ -24,7 +24,7 @@ use tokio::task::JoinError;
 use uuid::Uuid;
 
 use crate::{
-    common::{Balance, BlockchainInfo, FATCRAB_OBLIGATION_CUSTOM_KIND_STRING},
+    common::{Balances, BlockchainInfo, FATCRAB_OBLIGATION_CUSTOM_KIND_STRING},
     error::FatCrabError,
     maker::{
         FatCrabMaker, FatCrabMakerAccess, FatCrabMakerAccessEnum, FatCrabMakerEnum, MakerBuy,
@@ -459,7 +459,7 @@ impl FatCrabTrader {
         self.purse_accessor.get_mnemonic().await
     }
 
-    pub async fn wallet_balances(&self) -> Result<Balance, FatCrabError> {
+    pub async fn wallet_balances(&self) -> Result<Balances, FatCrabError> {
         self.purse_accessor.get_balances().await
     }
 
