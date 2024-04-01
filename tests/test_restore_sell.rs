@@ -3,9 +3,9 @@ mod common;
 #[cfg(test)]
 
 mod test {
-    use log::error;
     use secp256k1::SecretKey;
     use std::{fs, net::SocketAddr, str::FromStr, time::Duration};
+    use tracing::error;
     use uuid::Uuid;
 
     use tokio::time::sleep;

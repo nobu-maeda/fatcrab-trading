@@ -6,7 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-log = "0.4"
+tokio = { version = "1.36", features = ["sync", "time"] }
+tracing = "0.1.40"
 
 bdk = { git = "https://github.com/nobu-maeda/bdk", branch = "release/0.29", default-features = true, features = [
     "all-keys",
@@ -21,14 +22,13 @@ secp256k1 = "0.27"
 
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
-tokio = { version = "1.36", features = ["sync", "time"] }
 typetag = "0.2"
 url = { version = "2", features = ["serde"] }
 uuid = { version = "1.4", features = ["serde", "v4"] }
 
 [dev-dependencies]
 anyhow = "1.0"
-env_logger = "0.10"
+tracing-subscriber = "0.3.18"
 base64 = { version = "0.21.0" }
 electrsd = { version = "*", default-features = false, features = [
     "bitcoind_23_0",

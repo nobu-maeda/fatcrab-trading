@@ -1,5 +1,5 @@
-use log::{error, trace};
 use std::{path::Path, sync::Arc};
+use tracing::{error, trace};
 
 use tokio::{
     fs, select,

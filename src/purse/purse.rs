@@ -1,5 +1,5 @@
-use log::warn;
 use std::path::Path;
+use tracing::warn;
 
 use bdk::{
     bitcoin::{bip32::ExtendedPrivKey, Network},

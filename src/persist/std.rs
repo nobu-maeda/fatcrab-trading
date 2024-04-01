@@ -1,4 +1,4 @@
-use ::log::{error, trace};
+use ::tracing::{error, trace};
 use std::{
     fs,
     path::Path,

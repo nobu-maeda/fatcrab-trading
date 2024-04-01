@@ -2,8 +2,8 @@ mod common;
 
 #[cfg(test)]
 mod test {
-    use log::error;
     use std::{fs, net::SocketAddr};
+    use tracing::error;
 
     use fatcrab_trading::{
         common::BlockchainInfo,

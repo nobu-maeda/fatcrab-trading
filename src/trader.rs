@@ -1,9 +1,9 @@
-use log::{debug, warn};
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
     path::{Path, PathBuf},
 };
+use tracing::{debug, warn};
 use url::Url;
 
 use bip39::Mnemonic;
