@@ -529,14 +529,13 @@ impl FatCrabTakerActor {
                         },
                         FatCrabTakerRequest::TradeComplete { rsp_tx } => {
                             match self.inner {
-                                FatCrabTakerInnerActor::Buy(buy_actor) => {
+                                FatCrabTakerInnerActor::Buy(ref buy_actor) => {
                                     buy_actor.trade_complete(rsp_tx).await;
                                 }
-                                FatCrabTakerInnerActor::Sell(sell_actor) => {
+                                FatCrabTakerInnerActor::Sell(ref sell_actor) => {
                                     sell_actor.trade_complete(rsp_tx).await;
                                 }
                             }
-                            break;
                         },
                         FatCrabTakerRequest::Shutdown { rsp_tx } => {
                             self.shutdown(rsp_tx).await;
@@ -947,12 +946,11 @@ impl FatCrabTakerBuyActor {
     }
 
     async fn trade_complete(
-        self,
+        &self,
         rsp_tx: oneshot::Sender<Result<FatCrabTakerState, FatCrabError>>,
     ) {
         let new_state = FatCrabTakerState::TradeCompleted;
         self.data.set_state(new_state.clone());
-        self.data.terminate();
 
         match self.n3xb_taker.trade_complete().await {
             Ok(_) => {
@@ -1183,12 +1181,11 @@ impl FatCrabTakerSellActor {
     }
 
     async fn trade_complete(
-        self,
+        &self,
         rsp_tx: oneshot::Sender<Result<FatCrabTakerState, FatCrabError>>,
     ) {
         let new_state = FatCrabTakerState::TradeCompleted;
         self.data.set_state(new_state.clone());
-        self.data.terminate();
 
         match self.n3xb_taker.trade_complete().await {
             Ok(_) => {

@@ -559,14 +559,13 @@ impl FatCrabMakerActor {
                         },
                         FatCrabMakerRequest::TradeComplete { rsp_tx } => {
                             match self.inner {
-                                FatCrabMakerInnerActor::Buy(buy_actor) => {
+                                FatCrabMakerInnerActor::Buy(ref buy_actor) => {
                                     buy_actor.trade_complete(rsp_tx).await;
                                 },
-                                FatCrabMakerInnerActor::Sell(sell_actor) => {
+                                FatCrabMakerInnerActor::Sell(ref sell_actor) => {
                                     sell_actor.trade_complete(rsp_tx).await;
                                 }
                             }
-                            return;
                         },
                         FatCrabMakerRequest::Shutdown { rsp_tx } => {
                             self.shutdown(rsp_tx).await;
@@ -1030,11 +1029,10 @@ impl FatCrabMakerBuyActor {
     }
 
     async fn trade_complete(
-        self,
+        &self,
         rsp_tx: oneshot::Sender<Result<FatCrabMakerState, FatCrabError>>,
     ) {
         self.data.set_state(FatCrabMakerState::TradeCompleted);
-        self.data.terminate();
 
         match self.n3xb_maker.trade_complete().await {
             Ok(_) => {
@@ -1190,11 +1188,10 @@ impl FatCrabMakerSellActor {
     }
 
     async fn trade_complete(
-        self,
+        &self,
         rsp_tx: oneshot::Sender<Result<FatCrabMakerState, FatCrabError>>,
     ) {
         self.data.set_state(FatCrabMakerState::TradeCompleted);
-        self.data.terminate();
 
         match self.n3xb_maker.trade_complete().await {
             Ok(_) => {
