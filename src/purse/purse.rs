@@ -24,7 +24,7 @@ use tokio::{
 };
 use uuid::Uuid;
 
-use crate::common::BlockchainInfo;
+use crate::common::{Balance, BlockchainInfo};
 use crate::error::FatCrabError;
 
 use super::data::PurseData;
@@ -54,7 +54,7 @@ impl PurseAccess {
         rsp_rx.await.unwrap()
     }
 
-    pub(crate) async fn get_spendable_balance(&self) -> Result<u64, FatCrabError> {
+    pub(crate) async fn get_spendable_balance(&self) -> Result<Balance, FatCrabError> {
         let (rsp_tx, rsp_rx) = oneshot::channel();
         self.tx
             .send(PurseRequest::GetSpendableBalance { rsp_tx })
@@ -197,7 +197,7 @@ enum PurseRequest {
         rsp_tx: oneshot::Sender<Result<Address, FatCrabError>>,
     },
     GetSpendableBalance {
-        rsp_tx: oneshot::Sender<Result<u64, FatCrabError>>,
+        rsp_tx: oneshot::Sender<Result<Balance, FatCrabError>>,
     },
     GetAllocatedAmount {
         rsp_tx: oneshot::Sender<Result<u64, FatCrabError>>,
@@ -398,9 +398,15 @@ where
         self.wallet.get_balance().unwrap().confirmed - self.data.total_funds_allocated()
     }
 
-    pub(crate) fn get_spendable_balance(&self, rsp_tx: oneshot::Sender<Result<u64, FatCrabError>>) {
+    pub(crate) fn get_spendable_balance(
+        &self,
+        rsp_tx: oneshot::Sender<Result<Balance, FatCrabError>>,
+    ) {
         match self.wallet.get_balance() {
-            Ok(_balance) => rsp_tx.send(Ok(self.actual_spendable_balance())),
+            Ok(balance) => rsp_tx.send(Ok(Balance::from(
+                balance,
+                self.data.total_funds_allocated(),
+            ))),
             Err(e) => rsp_tx.send(Err(e.into())),
         }
         .unwrap();

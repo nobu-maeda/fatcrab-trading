@@ -115,16 +115,18 @@ mod test {
 
             // Check wallet funding
             node.generate_blocks(1);
+
             trader_m.wallet_blockchain_sync().await.unwrap();
-            assert_eq!(
-                trader_m.wallet_spendable_balance().await.unwrap(),
-                MAKER_BALANCE
-            );
+            let trader_m_balance = trader_m.wallet_spendable_balance().await.unwrap();
+            let trader_m_spendable_balance =
+                trader_m_balance.confirmed - trader_m_balance.allocated;
+            assert_eq!(trader_m_spendable_balance, MAKER_BALANCE);
+
             trader_t.wallet_blockchain_sync().await.unwrap();
-            assert_eq!(
-                trader_t.wallet_spendable_balance().await.unwrap(),
-                TAKER_BALANCE
-            );
+            let trader_t_balance = trader_t.wallet_spendable_balance().await.unwrap();
+            let trader_t_spendable_balance =
+                trader_t_balance.confirmed - trader_t_balance.allocated;
+            assert_eq!(trader_t_spendable_balance, TAKER_BALANCE);
 
             trader_m.shutdown().await.unwrap();
             trader_t.shutdown().await.unwrap();
@@ -138,10 +140,10 @@ mod test {
             trader_m.wallet_blockchain_sync().await.unwrap();
 
             // Check wallet balance as expected
-            assert_eq!(
-                trader_m.wallet_spendable_balance().await.unwrap(),
-                MAKER_BALANCE
-            );
+            let trader_m_balance = trader_m.wallet_spendable_balance().await.unwrap();
+            let trader_m_spendable_balance =
+                trader_m_balance.confirmed - trader_m_balance.allocated;
+            assert_eq!(trader_m_spendable_balance, MAKER_BALANCE);
 
             // Maker - Create Sell Order
             let order = FatCrabOrder {
@@ -370,8 +372,10 @@ mod test {
 
             // Confirm Bitcoin Balances
             let trader_m_balance = trader_m.wallet_spendable_balance().await.unwrap();
+            let trader_m_spendable_balance =
+                trader_m_balance.confirmed - trader_m_balance.allocated;
             assert_eq!(
-                trader_m_balance,
+                trader_m_spendable_balance,
                 MAKER_BALANCE + (PURCHASE_AMOUNT * PURCHASE_PRICE) as u64
             );
 
@@ -430,7 +434,12 @@ mod test {
             trader_t.reconnect().await.unwrap();
 
             let trader_t_balance = trader_t.wallet_spendable_balance().await.unwrap();
-            assert!(trader_t_balance < TAKER_BALANCE - (PURCHASE_AMOUNT * PURCHASE_PRICE) as u64);
+            let trader_t_spendable_balance =
+                trader_t_balance.confirmed - trader_t_balance.allocated;
+            assert!(
+                trader_t_spendable_balance
+                    < TAKER_BALANCE - (PURCHASE_AMOUNT * PURCHASE_PRICE) as u64
+            );
 
             let peer_msg_envelope = taker.query_peer_msg().await.unwrap().unwrap();
             assert_eq!(
