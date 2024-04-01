@@ -459,12 +459,8 @@ impl FatCrabTrader {
         self.purse_accessor.get_mnemonic().await
     }
 
-    pub async fn wallet_spendable_balance(&self) -> Result<Balance, FatCrabError> {
-        self.purse_accessor.get_spendable_balance().await
-    }
-
-    pub async fn wallet_allocated_amount(&self) -> Result<u64, FatCrabError> {
-        self.purse_accessor.get_allocated_amount().await
+    pub async fn wallet_balances(&self) -> Result<Balance, FatCrabError> {
+        self.purse_accessor.get_balances().await
     }
 
     pub async fn wallet_generate_receive_address(&self) -> Result<Address, FatCrabError> {

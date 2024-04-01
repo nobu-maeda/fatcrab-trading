@@ -69,7 +69,7 @@ impl Node {
             .unwrap();
     }
 
-    pub fn get_spendable_balance(&self) -> u64 {
+    pub fn get_balances(&self) -> u64 {
         self.bitcoind
             .client
             .get_balance(None, None)

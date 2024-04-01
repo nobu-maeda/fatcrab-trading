@@ -91,13 +91,13 @@ mod test {
         node.generate_blocks(1);
 
         trader_m.wallet_blockchain_sync().await.unwrap();
-        let trader_m_balance = trader_m.wallet_spendable_balance().await.unwrap();
-        let trader_m_spendable_balance = trader_m_balance.confirmed - trader_m_balance.allocated;
+        let trader_m_balances = trader_m.wallet_balances().await.unwrap();
+        let trader_m_spendable_balance = trader_m_balances.confirmed - trader_m_balances.allocated;
         assert_eq!(trader_m_spendable_balance, MAKER_BALANCE);
 
         trader_t.wallet_blockchain_sync().await.unwrap();
-        let trader_t_balance = trader_t.wallet_spendable_balance().await.unwrap();
-        let trader_t_spendable_balance = trader_t_balance.confirmed - trader_t_balance.allocated;
+        let trader_t_balances = trader_t.wallet_balances().await.unwrap();
+        let trader_t_spendable_balance = trader_t_balances.confirmed - trader_t_balances.allocated;
         assert_eq!(trader_t_spendable_balance, TAKER_BALANCE);
 
         // Maker - Create Sell Order
@@ -227,15 +227,15 @@ mod test {
         assert_eq!(tx_conf, 10 - 1);
 
         // Confirm Bitcoin Balances
-        let trader_m_balance = trader_m.wallet_spendable_balance().await.unwrap();
-        let trader_m_spendable_balance = trader_m_balance.confirmed - trader_m_balance.allocated;
+        let trader_m_balances = trader_m.wallet_balances().await.unwrap();
+        let trader_m_spendable_balance = trader_m_balances.confirmed - trader_m_balances.allocated;
         assert_eq!(
             trader_m_spendable_balance,
             MAKER_BALANCE + (PURCHASE_AMOUNT * PURCHASE_PRICE) as u64
         );
 
-        let trader_t_balance = trader_t.wallet_spendable_balance().await.unwrap();
-        let trader_t_spendable_balance = trader_t_balance.confirmed - trader_t_balance.allocated;
+        let trader_t_balances = trader_t.wallet_balances().await.unwrap();
+        let trader_t_spendable_balance = trader_t_balances.confirmed - trader_t_balances.allocated;
         assert!(
             trader_t_spendable_balance < TAKER_BALANCE - (PURCHASE_AMOUNT * PURCHASE_PRICE) as u64
         );
