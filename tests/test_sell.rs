@@ -224,7 +224,7 @@ mod test {
 
         // Maker - Confirm Bitcoin Tx
         let tx_conf = maker.check_btc_tx_confirmation().await.unwrap();
-        assert_eq!(tx_conf, 10 - 1);
+        assert_eq!(tx_conf, 10);
 
         // Confirm Bitcoin Balances
         let trader_m_balances = trader_m.wallet_balances().await.unwrap();

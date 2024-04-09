@@ -538,7 +538,7 @@ where
                 }))
                 .unwrap();
         } else {
-            rsp_tx.send(Ok(height - conf_height)).unwrap();
+            rsp_tx.send(Ok(height - conf_height + 1)).unwrap();
         }
     }
 

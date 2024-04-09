@@ -274,7 +274,7 @@ mod test {
 
         // Taker - Confirm Bitcoin Tx
         let tx_conf = taker.check_btc_tx_confirmation().await.unwrap();
-        assert_eq!(tx_conf, 10 - 1);
+        assert_eq!(tx_conf, 10);
 
         // Confirm Bitcoin Balances
         let trader_t_balances = trader_t.wallet_balances().await.unwrap();
