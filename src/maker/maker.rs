@@ -1,5 +1,5 @@
 use std::{marker::PhantomData, path::Path, str::FromStr};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, trace, warn};
 
 use bitcoin::{Address, Txid};
 use crusty_n3xb::{
@@ -138,6 +138,14 @@ impl<OrderType> FatCrabMakerAccess<OrderType> {
         let (rsp_tx, rsp_rx) = oneshot::channel::<Result<FatCrabMakerState, FatCrabError>>();
         self.tx
             .send(FatCrabMakerRequest::GetState { rsp_tx })
+            .await?;
+        rsp_rx.await.unwrap()
+    }
+
+    pub async fn get_peer_pubkey(&self) -> Result<Option<String>, FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<Option<String>, FatCrabError>>();
+        self.tx
+            .send(FatCrabMakerRequest::GetPeerPubkey { rsp_tx })
             .await?;
         rsp_rx.await.unwrap()
     }
@@ -370,6 +378,9 @@ enum FatCrabMakerRequest {
     GetOrderDetails {
         rsp_tx: oneshot::Sender<Result<FatCrabOrder, FatCrabError>>,
     },
+    GetPeerPubkey {
+        rsp_tx: oneshot::Sender<Result<Option<String>, FatCrabError>>,
+    },
     GetPeerBtcTxid {
         rsp_tx: oneshot::Sender<Result<Option<String>, FatCrabError>>,
     },
@@ -518,6 +529,9 @@ impl FatCrabMakerActor {
                         FatCrabMakerRequest::GetState { rsp_tx } => {
                             self.get_state(rsp_tx);
                         },
+                        FatCrabMakerRequest::GetPeerPubkey { rsp_tx } => {
+                            self.get_peer_pubkey(rsp_tx);
+                        },
                         FatCrabMakerRequest::GetPeerBtcTxid { rsp_tx } => {
                             self.get_peer_btc_txid(rsp_tx);
                         },
@@ -643,6 +657,14 @@ impl FatCrabMakerActor {
             FatCrabMakerInnerActor::Sell(ref sell_actor) => sell_actor.data.state(),
         };
         rsp_tx.send(Ok(state)).unwrap();
+    }
+
+    fn get_peer_pubkey(&self, rsp_tx: oneshot::Sender<Result<Option<String>, FatCrabError>>) {
+        let pubkey = match self.inner {
+            FatCrabMakerInnerActor::Buy(ref buy_actor) => buy_actor.data.peer_pubkey(),
+            FatCrabMakerInnerActor::Sell(ref sell_actor) => sell_actor.data.peer_pubkey(),
+        };
+        rsp_tx.send(Ok(pubkey)).unwrap();
     }
 
     fn get_peer_btc_txid(&self, rsp_tx: oneshot::Sender<Result<Option<String>, FatCrabError>>) {
@@ -945,6 +967,7 @@ impl FatCrabMakerBuyActor {
                 let n3xb_trade_rsp = trade_rsp_builder.build().unwrap();
                 self.n3xb_maker.accept_offer(n3xb_trade_rsp).await.unwrap();
                 rsp_tx.send(Ok(FatCrabMakerState::AcceptedOffer)).unwrap();
+                self.data.set_peer_pubkey(offer_envelope.pubkey);
                 self.data.set_state(FatCrabMakerState::AcceptedOffer);
             }
             FatCrabTradeRspType::Reject => {
@@ -990,6 +1013,11 @@ impl FatCrabMakerBuyActor {
         &self,
         rsp_tx: oneshot::Sender<Result<FatCrabMakerState, FatCrabError>>,
     ) {
+        trace!(
+            "Maker w/ TradeUUID {} Release BTC & Notify Peer",
+            self.trade_uuid
+        );
+
         let btc_addr = match self.data.peer_btc_addr().clone() {
             Some(peer_btc_addr) => peer_btc_addr,
             None => {
@@ -1114,6 +1142,8 @@ impl FatCrabMakerSellActor {
                 let n3xb_trade_rsp = trade_rsp_builder.build().unwrap();
                 self.n3xb_maker.accept_offer(n3xb_trade_rsp).await.unwrap();
                 rsp_tx.send(Ok(FatCrabMakerState::AcceptedOffer)).unwrap();
+
+                self.data.set_peer_pubkey(offer_envelope.pubkey);
                 self.data.set_state(FatCrabMakerState::AcceptedOffer);
             }
             FatCrabTradeRspType::Reject => {

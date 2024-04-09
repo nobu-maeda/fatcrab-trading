@@ -22,6 +22,7 @@ use super::state::FatCrabMakerState;
 struct FatCrabMakerBuyDataStore {
     order: FatCrabOrder,
     state: FatCrabMakerState,
+    peer_pubkey: Option<String>,
     fatcrab_rx_addr: String,
     btc_funds_id: Uuid,
     peer_btc_addr: Option<String>,
@@ -55,6 +56,7 @@ impl FatCrabMakerBuyData {
         let store = FatCrabMakerBuyDataStore {
             order: order.to_owned(),
             state: FatCrabMakerState::New,
+            peer_pubkey: None,
             fatcrab_rx_addr: fatcrab_rx_addr.as_ref().to_owned(),
             btc_funds_id,
             peer_btc_addr: None,
@@ -119,6 +121,10 @@ impl FatCrabMakerBuyData {
         self.read_store().state.to_owned()
     }
 
+    pub(crate) fn peer_pubkey(&self) -> Option<String> {
+        self.read_store().peer_pubkey.to_owned()
+    }
+
     pub(crate) fn fatcrab_rx_addr(&self) -> String {
         self.read_store().fatcrab_rx_addr.to_owned()
     }
@@ -150,6 +156,11 @@ impl FatCrabMakerBuyData {
         self.persister.queue();
     }
 
+    pub(crate) fn set_peer_pubkey(&self, pubkey: String) {
+        self.write_store().peer_pubkey = Some(pubkey);
+        self.persister.queue();
+    }
+
     pub(crate) fn set_peer_btc_addr(&self, addr: Address) {
         self.write_store().peer_btc_addr = Some(addr.to_string());
         self.persister.queue();
@@ -174,6 +185,7 @@ impl FatCrabMakerBuyData {
 struct FatCrabMakerSellDataStore {
     order: FatCrabOrder,
     state: FatCrabMakerState,
+    peer_pubkey: Option<String>,
     btc_rx_addr: String,
     peer_btc_txid: Option<Txid>,
     offer_envelopes: Vec<FatCrabOfferEnvelope>,
@@ -205,6 +217,7 @@ impl FatCrabMakerSellData {
         let store = FatCrabMakerSellDataStore {
             order: order.to_owned(),
             state: FatCrabMakerState::New,
+            peer_pubkey: None,
             btc_rx_addr: btc_rx_addr.to_string(),
             peer_btc_txid: None,
             offer_envelopes: Vec::new(),
@@ -268,6 +281,10 @@ impl FatCrabMakerSellData {
         self.read_store().state.to_owned()
     }
 
+    pub(crate) fn peer_pubkey(&self) -> Option<String> {
+        self.read_store().peer_pubkey.to_owned()
+    }
+
     pub(crate) fn btc_rx_addr(&self) -> Address {
         let addr_string = self.read_store().btc_rx_addr.clone();
         parse_address(addr_string, self.network)
@@ -287,6 +304,11 @@ impl FatCrabMakerSellData {
 
     pub(crate) fn set_state(&self, state: FatCrabMakerState) {
         self.write_store().state = state;
+        self.persister.queue();
+    }
+
+    pub(crate) fn set_peer_pubkey(&self, pubkey: String) {
+        self.write_store().peer_pubkey = Some(pubkey);
         self.persister.queue();
     }
 
