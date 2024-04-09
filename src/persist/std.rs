@@ -1,4 +1,4 @@
-use ::tracing::{error, trace};
+use ::tracing::{debug, error, trace};
 use std::{
     fs,
     path::Path,
@@ -20,6 +20,11 @@ pub(crate) struct Persister {
 impl Persister {
     pub(crate) fn restore(data_path: impl AsRef<Path>) -> Result<String, FatCrabError> {
         let json: String = std::fs::read_to_string(data_path.as_ref())?;
+        debug!(
+            "Restored Fatcrab JSON from path {} - {}",
+            data_path.as_ref().display().to_string(),
+            json
+        );
         Ok(json)
     }
 
@@ -82,6 +87,13 @@ impl Persister {
         data_path: impl AsRef<Path>,
     ) -> Result<(), FatCrabError> {
         let json = serde_json::to_string(&*store)?;
+
+        debug!(
+            "Persisting Fatcrab JSON to path {} - {}",
+            data_path.as_ref().display().to_string(),
+            json
+        );
+
         fs::write(data_path.as_ref(), json)?;
         Ok(())
     }

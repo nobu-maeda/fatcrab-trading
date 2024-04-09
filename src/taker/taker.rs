@@ -1,5 +1,5 @@
 use std::{marker::PhantomData, path::Path, str::FromStr};
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
 use bitcoin::{address::Address, Txid};
 use crusty_n3xb::{
@@ -595,6 +595,11 @@ impl FatCrabTakerActor {
     }
 
     fn set_state(&self, state: FatCrabTakerState) {
+        debug!(
+            "Setting Taker w/ TradeUUID {} State to {:?}",
+            self.trade_uuid, state
+        );
+
         match self.inner {
             FatCrabTakerInnerActor::Buy(ref buy_actor) => {
                 buy_actor.data.set_state(state);
