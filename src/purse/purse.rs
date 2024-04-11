@@ -321,6 +321,8 @@ where
             warn!("Block height is higher in restored data than provided network");
         }
 
+        wallet.sync(&blockchain, SyncOptions::default()).unwrap();
+
         Self {
             rx,
             secret_key: key,
@@ -425,7 +427,7 @@ where
 
         let funds_id = Uuid::new_v4();
         self.data
-            .allocate_funds(&funds_id, sats, self.blockchain.get_height().ok());
+            .allocate_funds(&funds_id, sats, Some(self.data.height()));
         rsp_tx.send(Ok(funds_id)).unwrap();
     }
 
@@ -436,7 +438,7 @@ where
     ) {
         if self
             .data
-            .deallocate_funds(&funds_id, self.blockchain.get_height().ok())
+            .deallocate_funds(&funds_id, Some(self.data.height()))
             .is_some()
         {
             rsp_tx.send(Ok(())).unwrap();
@@ -496,7 +498,7 @@ where
 
         if self
             .data
-            .deallocate_funds(funds_id, self.blockchain.get_height().ok())
+            .deallocate_funds(funds_id, Some(self.data.height()))
             .is_some()
         {
             rsp_tx.send(Ok(tx.txid())).unwrap();
@@ -522,13 +524,7 @@ where
         txid: Txid,
         rsp_tx: oneshot::Sender<Result<u32, FatCrabError>>,
     ) {
-        let height = match self.blockchain.get_height() {
-            Ok(height) => height,
-            Err(e) => {
-                rsp_tx.send(Err(e.into())).unwrap();
-                return;
-            }
-        };
+        let height = self.data.height();
 
         let tx_details = match self.wallet.get_tx(&txid, false) {
             Ok(tx_details) => match tx_details {
@@ -567,7 +563,11 @@ where
 
     pub(crate) fn sync_blockchain(&self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
         match self.wallet.sync(&self.blockchain, SyncOptions::default()) {
-            Ok(_) => rsp_tx.send(Ok(())),
+            Ok(_) => {
+                let height = self.blockchain.get_height().unwrap();
+                self.data.set_height(height);
+                rsp_tx.send(Ok(()))
+            }
             Err(e) => rsp_tx.send(Err(e.into())),
         }
         .unwrap();

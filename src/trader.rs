@@ -476,7 +476,7 @@ impl FatCrabTrader {
         self.purse_accessor.send_funds(funds_id, address).await
     }
 
-    pub async fn wallet_get_height(&self) -> Result<u32, FatCrabError> {
+    pub async fn wallet_blockchain_height(&self) -> Result<u32, FatCrabError> {
         self.purse_accessor.get_height().await
     }
 

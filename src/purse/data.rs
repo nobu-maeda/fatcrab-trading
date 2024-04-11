@@ -103,6 +103,11 @@ impl PurseData {
         self.read_store().height
     }
 
+    pub(crate) fn set_height(&self, height: u32) {
+        let mut store = self.write_store();
+        store.height = height;
+    }
+
     pub(crate) fn total_funds_allocated(&self) -> u64 {
         self.read_store().allocated_funds.values().sum::<u64>()
     }
