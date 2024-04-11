@@ -4,8 +4,8 @@ use tracing::warn;
 use bdk::{
     bitcoin::{bip32::ExtendedPrivKey, Network},
     blockchain::{
-        rpc::Auth as BdkAuth, Blockchain, ConfigurableBlockchain, ElectrumBlockchain, GetHeight,
-        RpcBlockchain, RpcConfig, WalletSync,
+        rpc::Auth as BdkAuth, Blockchain, ConfigurableBlockchain, ElectrumBlockchain,
+        RpcBlockchain, RpcConfig,
     },
     database::MemoryDatabase,
     electrum_client::Client,
@@ -93,6 +93,15 @@ impl PurseAccess {
                 address,
                 rsp_tx,
             })
+            .await
+            .unwrap();
+        rsp_rx.await.unwrap()
+    }
+
+    pub(crate) async fn get_height(&self) -> Result<u32, FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel();
+        self.tx
+            .send(PurseRequest::GetHeight { rsp_tx })
             .await
             .unwrap();
         rsp_rx.await.unwrap()
@@ -203,6 +212,9 @@ enum PurseRequest {
         address: Address,
         rsp_tx: oneshot::Sender<Result<Txid, FatCrabError>>,
     },
+    GetHeight {
+        rsp_tx: oneshot::Sender<Result<u32, FatCrabError>>,
+    },
     GetTxConf {
         txid: Txid,
         rsp_tx: oneshot::Sender<Result<u32, FatCrabError>>,
@@ -215,7 +227,7 @@ enum PurseRequest {
     },
 }
 
-struct PurseActor<ChainType: Blockchain + GetHeight + WalletSync> {
+struct PurseActor<ChainType: Blockchain> {
     rx: mpsc::Receiver<PurseRequest>,
     secret_key: SecretKey,
     wallet: Wallet<MemoryDatabase>, // TOOD: This can't be Memory Database forever
@@ -274,7 +286,7 @@ impl PurseActor<RpcBlockchain> {
 
 impl<ChainType> PurseActor<ChainType>
 where
-    ChainType: Blockchain + GetHeight + WalletSync,
+    ChainType: Blockchain,
 {
     pub(crate) fn new(
         rx: mpsc::Receiver<PurseRequest>,
@@ -344,6 +356,9 @@ where
                                 rsp_tx,
                             } => {
                                 self.send_funds(&funds_id, address, rsp_tx);
+                            }
+                            PurseRequest::GetHeight { rsp_tx } => {
+                                self.get_height(rsp_tx);
                             }
                             PurseRequest::GetTxConf { txid, rsp_tx } => {
                                 self.get_tx_conf(txid, rsp_tx);
@@ -492,6 +507,14 @@ where
                 }))
                 .unwrap();
         }
+    }
+
+    pub(crate) fn get_height(&self, rsp_tx: oneshot::Sender<Result<u32, FatCrabError>>) {
+        match self.blockchain.get_height() {
+            Ok(height) => rsp_tx.send(Ok(height)),
+            Err(e) => rsp_tx.send(Err(e.into())),
+        }
+        .unwrap();
     }
 
     pub(crate) fn get_tx_conf(
