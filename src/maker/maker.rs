@@ -1065,11 +1065,12 @@ impl FatCrabMakerBuyActor {
         &self,
         rsp_tx: oneshot::Sender<Result<FatCrabMakerState, FatCrabError>>,
     ) {
-        self.data.set_state(FatCrabMakerState::TradeCompleted);
+        let new_state = FatCrabMakerState::TradeCompleted;
+        self.data.set_state(new_state.clone());
 
         match self.n3xb_maker.trade_complete().await {
             Ok(_) => {
-                rsp_tx.send(Ok(FatCrabMakerState::TradeCompleted)).unwrap();
+                rsp_tx.send(Ok(new_state)).unwrap();
             }
             Err(error) => {
                 rsp_tx.send(Err(error.into())).unwrap();
@@ -1226,11 +1227,13 @@ impl FatCrabMakerSellActor {
         &self,
         rsp_tx: oneshot::Sender<Result<FatCrabMakerState, FatCrabError>>,
     ) {
-        self.data.set_state(FatCrabMakerState::TradeCompleted);
+        let new_state = FatCrabMakerState::TradeCompleted;
+
+        self.data.set_state(new_state.clone());
 
         match self.n3xb_maker.trade_complete().await {
             Ok(_) => {
-                rsp_tx.send(Ok(FatCrabMakerState::TradeCompleted)).unwrap();
+                rsp_tx.send(Ok(new_state)).unwrap();
             }
             Err(error) => {
                 rsp_tx.send(Err(error.into())).unwrap();
