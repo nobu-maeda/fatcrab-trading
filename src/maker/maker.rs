@@ -168,6 +168,14 @@ impl<OrderType> FatCrabMakerAccess<OrderType> {
         rsp_rx.await.unwrap()
     }
 
+    pub async fn cancel_order(&self) -> Result<(), FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
+        self.tx
+            .send(FatCrabMakerRequest::CancelOrder { rsp_tx })
+            .await?;
+        rsp_rx.await.unwrap()
+    }
+
     pub async fn trade_response(
         &self,
         trade_rsp_type: FatCrabTradeRspType,
@@ -390,6 +398,9 @@ enum FatCrabMakerRequest {
     QueryPeerMsg {
         rsp_tx: oneshot::Sender<Result<Option<FatCrabPeerEnvelope>, FatCrabError>>,
     },
+    CancelOrder {
+        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
+    },
     TradeResponse {
         trade_rsp_type: FatCrabTradeRspType,
         offer_envelope: FatCrabOfferEnvelope,
@@ -540,6 +551,16 @@ impl FatCrabMakerActor {
                         },
                         FatCrabMakerRequest::QueryPeerMsg { rsp_tx } => {
                             self.query_peer_msg(rsp_tx);
+                        },
+                        FatCrabMakerRequest::CancelOrder { rsp_tx } => {
+                            match self.inner {
+                                FatCrabMakerInnerActor::Buy(ref buy_actor) => {
+                                    buy_actor.cancel_order(rsp_tx).await;
+                                },
+                                FatCrabMakerInnerActor::Sell(ref sell_actor) => {
+                                    sell_actor.cancel_order(rsp_tx).await;
+                                }
+                            }
                         },
                         FatCrabMakerRequest::TradeResponse { trade_rsp_type, offer_envelope, rsp_tx } => {
                             match self.inner {
@@ -947,6 +968,32 @@ impl FatCrabMakerBuyActor {
         Ok((trade_uuid, actor))
     }
 
+    async fn cancel_order(&self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+        match self.data.state() {
+            FatCrabMakerState::New
+            | FatCrabMakerState::WaitingForOffers
+            | FatCrabMakerState::ReceivedOffer => match self.n3xb_maker.cancel_order().await {
+                Ok(_) => {
+                    self.data.set_state(FatCrabMakerState::TradeCompleted);
+                    rsp_tx.send(Ok(())).unwrap();
+                }
+                Err(error) => {
+                    rsp_tx.send(Err(error.into())).unwrap();
+                }
+            },
+            _ => {
+                let error = FatCrabError::Simple {
+                    description: format!(
+                        "Maker w/ TradeUUID {} cannot cancel order in state {:?}",
+                        self.trade_uuid,
+                        self.data.state()
+                    ),
+                };
+                rsp_tx.send(Err(error)).unwrap();
+            }
+        }
+    }
+
     async fn trade_response(
         &self,
         trade_rsp_type: FatCrabTradeRspType,
@@ -971,8 +1018,15 @@ impl FatCrabMakerBuyActor {
                 self.data.set_state(FatCrabMakerState::AcceptedOffer);
             }
             FatCrabTradeRspType::Reject => {
-                self.n3xb_maker.cancel_order().await.unwrap();
-                rsp_tx.send(Ok(FatCrabMakerState::ReceivedOffer)).unwrap();
+                let mut trade_rsp_builder = TradeResponseBuilder::new();
+                trade_rsp_builder.offer_event_id(offer_envelope.envelope.event_id);
+                trade_rsp_builder.trade_response(TradeResponseStatus::Rejected);
+
+                let n3xb_trade_rsp = trade_rsp_builder.build().unwrap();
+                self.n3xb_maker.reject_offer(n3xb_trade_rsp).await.unwrap();
+
+                let state = self.data.state();
+                rsp_tx.send(Ok(state)).unwrap();
             }
         }
     }
@@ -1123,6 +1177,32 @@ impl FatCrabMakerSellActor {
         Ok((trade_uuid, actor))
     }
 
+    async fn cancel_order(&self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+        match self.data.state() {
+            FatCrabMakerState::New
+            | FatCrabMakerState::WaitingForOffers
+            | FatCrabMakerState::ReceivedOffer => match self.n3xb_maker.cancel_order().await {
+                Ok(_) => {
+                    self.data.set_state(FatCrabMakerState::TradeCompleted);
+                    rsp_tx.send(Ok(())).unwrap();
+                }
+                Err(error) => {
+                    rsp_tx.send(Err(error.into())).unwrap();
+                }
+            },
+            _ => {
+                let error = FatCrabError::Simple {
+                    description: format!(
+                        "Maker w/ TradeUUID {} cannot cancel order in state {:?}",
+                        self.trade_uuid,
+                        self.data.state()
+                    ),
+                };
+                rsp_tx.send(Err(error)).unwrap();
+            }
+        }
+    }
+
     async fn trade_response(
         &self,
         trade_rsp_type: FatCrabTradeRspType,
@@ -1148,8 +1228,15 @@ impl FatCrabMakerSellActor {
                 self.data.set_state(FatCrabMakerState::AcceptedOffer);
             }
             FatCrabTradeRspType::Reject => {
-                self.n3xb_maker.cancel_order().await.unwrap();
-                rsp_tx.send(Ok(FatCrabMakerState::ReceivedOffer)).unwrap();
+                let mut trade_rsp_builder = TradeResponseBuilder::new();
+                trade_rsp_builder.offer_event_id(offer_envelope.envelope.event_id);
+                trade_rsp_builder.trade_response(TradeResponseStatus::Rejected);
+
+                let n3xb_trade_rsp = trade_rsp_builder.build().unwrap();
+                self.n3xb_maker.reject_offer(n3xb_trade_rsp).await.unwrap();
+
+                let state = self.data.state();
+                rsp_tx.send(Ok(state)).unwrap();
             }
         }
     }
