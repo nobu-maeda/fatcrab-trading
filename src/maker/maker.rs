@@ -1013,9 +1013,10 @@ impl FatCrabMakerBuyActor {
 
                 let n3xb_trade_rsp = trade_rsp_builder.build().unwrap();
                 self.n3xb_maker.accept_offer(n3xb_trade_rsp).await.unwrap();
-                rsp_tx.send(Ok(FatCrabMakerState::AcceptedOffer)).unwrap();
+
                 self.data.set_peer_pubkey(offer_envelope.pubkey);
                 self.data.set_state(FatCrabMakerState::AcceptedOffer);
+                rsp_tx.send(Ok(FatCrabMakerState::AcceptedOffer)).unwrap();
             }
             FatCrabTradeRspType::Reject => {
                 let mut trade_rsp_builder = TradeResponseBuilder::new();
@@ -1222,10 +1223,10 @@ impl FatCrabMakerSellActor {
 
                 let n3xb_trade_rsp = trade_rsp_builder.build().unwrap();
                 self.n3xb_maker.accept_offer(n3xb_trade_rsp).await.unwrap();
-                rsp_tx.send(Ok(FatCrabMakerState::AcceptedOffer)).unwrap();
 
                 self.data.set_peer_pubkey(offer_envelope.pubkey);
                 self.data.set_state(FatCrabMakerState::AcceptedOffer);
+                rsp_tx.send(Ok(FatCrabMakerState::AcceptedOffer)).unwrap();
             }
             FatCrabTradeRspType::Reject => {
                 let mut trade_rsp_builder = TradeResponseBuilder::new();
