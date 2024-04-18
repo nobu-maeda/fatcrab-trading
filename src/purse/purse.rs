@@ -1,5 +1,5 @@
 use std::path::Path;
-use tracing::warn;
+use tracing::{error, trace, warn};
 
 use bdk::{
     bitcoin::{bip32::ExtendedPrivKey, Network},
@@ -458,9 +458,16 @@ where
         address: Address,
         rsp_tx: oneshot::Sender<Result<Txid, FatCrabError>>,
     ) {
+        trace!("PurseActor::send_funds()");
+
         let sats = match self.data.get_allocated_funds(funds_id) {
             Some(sats) => sats,
             None => {
+                error!(
+                    "PurseActor::send_funds() - Could not find allocated funds with ID {}",
+                    funds_id
+                );
+
                 rsp_tx
                     .send(Err(FatCrabError::Simple {
                         description: format!("Could not find allocated funds with ID {}", funds_id),
@@ -470,12 +477,22 @@ where
             }
         };
 
+        trace!(
+            "PureActor::send_funds() - Sending {} sats to {}",
+            sats,
+            address
+        );
+
         let mut tx_builder = self.wallet.build_tx();
         tx_builder.set_recipients(vec![(address.script_pubkey(), sats)]);
 
         let mut psbt = match tx_builder.finish() {
             Ok((psbt, _)) => psbt,
             Err(e) => {
+                error!(
+                    "PurseActor::send_funds() - Error building transaction: {}",
+                    e
+                );
                 rsp_tx.send(Err(e.into())).unwrap();
                 return;
             }
@@ -487,23 +504,43 @@ where
         };
 
         if let Some(error) = self.wallet.sign(&mut psbt, signopt).err() {
+            error!(
+                "PurseActor::send_funds() - Error signing transaction: {}",
+                error
+            );
             rsp_tx.send(Err(error.into())).unwrap();
             return;
         }
         let tx = psbt.extract_tx();
 
+        trace!(
+            "PurseActor::send_funds() - Broadcasting transaction: {}",
+            tx.txid()
+        );
+
         if let Some(error) = self.blockchain.broadcast(&tx).err() {
+            error!(
+                "PurseActor::send_funds() - Error broadcasting transaction: {}",
+                error
+            );
             rsp_tx.send(Err(error.into())).unwrap();
             return;
         }
+
+        trace!("PurseActor::send_funds() - Transaction sent: {}", tx.txid());
 
         if self
             .data
             .deallocate_funds(funds_id, Some(self.data.height()))
             .is_some()
         {
+            trace!("PurseActor::send_funds() - Funds {} deallocated", funds_id);
             rsp_tx.send(Ok(tx.txid())).unwrap();
         } else {
+            error!(
+                "PurseActor::send_funds() - Could not find allocated funds with ID {}",
+                funds_id
+            );
             rsp_tx
                 .send(Err(FatCrabError::Simple {
                     description: format!("Could not find allocated funds with ID {}", funds_id),
