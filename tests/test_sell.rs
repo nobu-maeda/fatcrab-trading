@@ -185,7 +185,9 @@ mod test {
             .unwrap();
         assert!(matches!(maker_state, FatCrabMakerState::AcceptedOffer));
         let maker_state = maker.get_state().await.unwrap();
-        assert!(matches!(maker_state, FatCrabMakerState::AcceptedOffer));
+
+        // Taker's BTC auto remit would have moved Maker to InboundBtcNotified right away
+        // assert!(matches!(maker_state, FatCrabMakerState::AcceptedOffer));
 
         // Taker should auto remit BTC, auto peer notify with TxID and FatCrab address
         let taker_notif = taker_notif_rx.recv().await.unwrap();
