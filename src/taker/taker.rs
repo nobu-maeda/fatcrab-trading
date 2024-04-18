@@ -722,7 +722,24 @@ impl FatCrabTakerActor {
         rsp_tx.send(result).unwrap();
     }
 
+    fn state(&self) -> FatCrabTakerState {
+        match self.inner {
+            FatCrabTakerInnerActor::Buy(ref buy_actor) => buy_actor.data.state(),
+            FatCrabTakerInnerActor::Sell(ref sell_actor) => sell_actor.data.state(),
+        }
+    }
+
     async fn handle_trade_rsp_notif(&mut self, trade_rsp_envelope: TradeResponseEnvelope) {
+        if self.state() != FatCrabTakerState::SubmittedOffer {
+            debug!(
+                "Taker w/ TradeUUID {} received TradeRsp w/ eventID {} in {:?} state",
+                self.trade_uuid,
+                trade_rsp_envelope.event_id,
+                self.state()
+            );
+            return;
+        }
+
         let trade_rsp = FatCrabTradeRsp::from_n3xb_trade_rsp(trade_rsp_envelope.trade_rsp.clone());
 
         match self.inner {
@@ -740,6 +757,16 @@ impl FatCrabTakerActor {
     }
 
     async fn handle_peer_notif(&mut self, peer_envelope: PeerEnvelope) {
+        if self.state() != FatCrabTakerState::NotifiedOutbound {
+            debug!(
+                "Taker w/ TradeUUID {} received peer notif w/ eventID {} in {:?} state",
+                self.trade_uuid,
+                peer_envelope.event_id,
+                self.state()
+            );
+            return;
+        }
+
         let fatcrab_peer_message = peer_envelope
             .message
             .downcast_ref::<FatCrabPeerMessage>()

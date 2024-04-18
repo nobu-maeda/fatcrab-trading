@@ -795,7 +795,24 @@ impl FatCrabMakerActor {
         }
     }
 
+    fn state(&self) -> FatCrabMakerState {
+        match self.inner {
+            FatCrabMakerInnerActor::Buy(ref buy_actor) => buy_actor.data.state(),
+            FatCrabMakerInnerActor::Sell(ref sell_actor) => sell_actor.data.state(),
+        }
+    }
+
     async fn handle_offer_notif(&self, offer_envelope: OfferEnvelope) {
+        if self.state() != FatCrabMakerState::WaitingForOffers {
+            debug!(
+                "Maker w/ TradeUUID {} received offer envelope w/ eventID {} in {:?} state",
+                self.trade_uuid.to_string(),
+                offer_envelope.event_id,
+                self.state()
+            );
+            return;
+        }
+
         let n3xb_offer = offer_envelope.offer.clone();
         match FatCrabOffer::validate_n3xb_offer(n3xb_offer) {
             Ok(_) => {
@@ -847,6 +864,16 @@ impl FatCrabMakerActor {
     }
 
     async fn handle_peer_notif(&mut self, peer_envelope: PeerEnvelope) {
+        if self.state() != FatCrabMakerState::AcceptedOffer {
+            debug!(
+                "Maker w/ TradeUUID {} received peer notif w/ eventID {} in {:?} state",
+                self.trade_uuid.to_string(),
+                peer_envelope.event_id,
+                self.state()
+            );
+            return;
+        }
+
         let fatcrab_peer_message = peer_envelope
             .message
             .downcast_ref::<FatCrabPeerMessage>()
