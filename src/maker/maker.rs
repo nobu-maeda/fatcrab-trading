@@ -1103,6 +1103,7 @@ impl FatCrabMakerBuyActor {
             receive_address: self.data.fatcrab_rx_addr().clone(),
             txid: txid.to_string(),
         };
+
         match self.n3xb_maker.send_peer_message(Box::new(message)).await {
             Ok(_) => {
                 rsp_tx

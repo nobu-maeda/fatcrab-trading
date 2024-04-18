@@ -472,6 +472,15 @@ impl FatCrabTrader {
         address: Address,
         sats: u64,
     ) -> Result<Txid, FatCrabError> {
+        // Only allow confirmed amounts to be sent
+        let balance = self.purse_accessor.get_balances().await?;
+
+        if balance.confirmed < sats {
+            return Err(FatCrabError::Simple {
+                description: "Insufficient Confirmed Balance".to_string(),
+            });
+        }
+
         let funds_id = self.purse_accessor.allocate_funds(sats).await?;
         self.purse_accessor.send_funds(funds_id, address).await
     }

@@ -167,6 +167,7 @@ struct FatCrabTakerSellDataStore {
     state: FatCrabTakerState,
     fatcrab_rx_addr: String,
     btc_funds_id: Uuid,
+    peer_btc_addr: Option<String>,
     peer_envelope: Option<FatCrabPeerEnvelope>,
 }
 
@@ -187,6 +188,7 @@ impl FatCrabTakerSellData {
         order_envelope: &FatCrabOrderEnvelope,
         fatcrab_rx_addr: impl AsRef<str>,
         btc_funds_id: Uuid,
+        peer_btc_addr: Option<String>,
         dir_path: impl AsRef<Path>,
     ) -> Self {
         let data_path = dir_path
@@ -198,6 +200,7 @@ impl FatCrabTakerSellData {
             state: FatCrabTakerState::New,
             fatcrab_rx_addr: fatcrab_rx_addr.as_ref().to_owned(),
             btc_funds_id,
+            peer_btc_addr,
             peer_envelope: None,
         };
 
@@ -259,12 +262,21 @@ impl FatCrabTakerSellData {
         self.read_store().btc_funds_id
     }
 
+    pub(crate) fn peer_btc_addr(&self) -> Option<String> {
+        self.read_store().peer_btc_addr.clone()
+    }
+
     pub(crate) fn peer_envelope(&self) -> Option<FatCrabPeerEnvelope> {
         self.read_store().peer_envelope.clone()
     }
 
     pub(crate) fn set_state(&self, state: FatCrabTakerState) {
         self.write_store().state = state;
+        self.persister.queue();
+    }
+
+    pub(crate) fn set_peer_btc_addr(&self, peer_btc_addr: String) {
+        self.write_store().peer_btc_addr = Some(peer_btc_addr);
         self.persister.queue();
     }
 

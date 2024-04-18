@@ -396,8 +396,9 @@ where
         .unwrap();
     }
 
-    fn actual_spendable_balance(&self) -> u64 {
-        self.wallet.get_balance().unwrap().confirmed - self.data.total_funds_allocated()
+    fn allocatable_balance(&self) -> u64 {
+        let balance = self.wallet.get_balance().unwrap();
+        balance.confirmed + balance.trusted_pending - self.data.total_funds_allocated()
     }
 
     pub(crate) fn get_balances(&self, rsp_tx: oneshot::Sender<Result<Balances, FatCrabError>>) {
@@ -416,7 +417,7 @@ where
         sats: u64,
         rsp_tx: oneshot::Sender<Result<Uuid, FatCrabError>>,
     ) {
-        if self.actual_spendable_balance() < sats {
+        if self.allocatable_balance() < sats {
             rsp_tx
                 .send(Err(FatCrabError::Simple {
                     description: "Insufficient Funds".to_string(),
