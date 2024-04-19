@@ -487,7 +487,7 @@ where
         tx_builder.set_recipients(vec![(address.script_pubkey(), sats)]);
 
         if self.wallet.network() != Network::Regtest {
-            let confirm_in_blocks = 3;
+            let confirm_in_blocks = 5;
             let fee_rate = match self.blockchain.estimate_fee(confirm_in_blocks) {
                 Ok(fee_rate) => fee_rate,
                 Err(e) => {
@@ -505,7 +505,7 @@ where
                 "PurseActor::send_funds() - Estimated fee rate: {:?} sats/vbyte to confirm in {} blocks",
                 fee_rate, confirm_in_blocks
             );
-            tx_builder.fee_rate(fee_rate);
+            tx_builder.fee_rate(fee_rate).enable_rbf();
         }
 
         let mut psbt = match tx_builder.finish() {
