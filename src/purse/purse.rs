@@ -486,6 +486,28 @@ where
         let mut tx_builder = self.wallet.build_tx();
         tx_builder.set_recipients(vec![(address.script_pubkey(), sats)]);
 
+        if self.wallet.network() != Network::Regtest {
+            let confirm_in_blocks = 3;
+            let fee_rate = match self.blockchain.estimate_fee(confirm_in_blocks) {
+                Ok(fee_rate) => fee_rate,
+                Err(e) => {
+                    error!(
+                        "PurseActor::send_funds() - Error estimating fee rate: {}",
+                        e
+                    );
+
+                    rsp_tx.send(Err(e.into())).unwrap();
+                    return;
+                }
+            };
+
+            trace!(
+                "PurseActor::send_funds() - Estimated fee rate: {:?} sats/vbyte to confirm in {} blocks",
+                fee_rate, confirm_in_blocks
+            );
+            tx_builder.fee_rate(fee_rate);
+        }
+
         let mut psbt = match tx_builder.finish() {
             Ok((psbt, _)) => psbt,
             Err(e) => {
