@@ -1178,7 +1178,6 @@ impl FatCrabTakerSellActor {
         n3xb_trade_rsp_envelope: TradeResponseEnvelope,
     ) {
         if let Some(notif_tx) = &self.notif_tx {
-            // Notify User that Offer was rejected
             let fatcrab_trade_rsp_envelope = FatCrabTradeRspEnvelope {
                 _envelope: n3xb_trade_rsp_envelope.clone(),
                 trade_rsp,

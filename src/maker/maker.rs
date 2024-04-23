@@ -803,7 +803,9 @@ impl FatCrabMakerActor {
     }
 
     async fn handle_offer_notif(&self, offer_envelope: OfferEnvelope) {
-        if self.state() != FatCrabMakerState::WaitingForOffers {
+        if self.state() != FatCrabMakerState::WaitingForOffers
+            && self.state() != FatCrabMakerState::ReceivedOffer
+        {
             debug!(
                 "Maker w/ TradeUUID {} received offer envelope w/ eventID {} in {:?} state",
                 self.trade_uuid.to_string(),
