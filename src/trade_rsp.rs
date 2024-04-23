@@ -42,15 +42,18 @@ pub enum FatCrabTradeRsp {
 
 impl FatCrabTradeRsp {
     pub(crate) fn from_n3xb_trade_rsp(trade_rsp: TradeResponse) -> Self {
-        let trade_rsp_specifics = trade_rsp
-            .trade_engine_specifics
-            .downcast_ref::<FatCrabMakeTradeRspSpecifics>()
-            .unwrap();
         match trade_rsp.trade_response {
-            TradeResponseStatus::Accepted => FatCrabTradeRsp::Accept {
-                receive_address: trade_rsp_specifics.receive_address.clone(),
-            },
-            _ => FatCrabTradeRsp::Reject,
+            TradeResponseStatus::Accepted => {
+                let trade_rsp_specifics = trade_rsp
+                    .trade_engine_specifics
+                    .downcast_ref::<FatCrabMakeTradeRspSpecifics>()
+                    .unwrap();
+                FatCrabTradeRsp::Accept {
+                    receive_address: trade_rsp_specifics.receive_address.clone(),
+                }
+            }
+            TradeResponseStatus::Rejected => FatCrabTradeRsp::Reject,
+            TradeResponseStatus::NotAvailable => FatCrabTradeRsp::Reject,
         }
     }
 }
