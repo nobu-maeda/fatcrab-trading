@@ -10,4 +10,5 @@ pub enum FatCrabMakerState {
     InboundFcNotified,
     NotifiedOutbound,
     TradeCompleted,
+    TradeCancelled,
 }

@@ -1096,6 +1096,11 @@ impl FatCrabTakerSellActor {
             }
 
             FatCrabTradeRsp::Reject => {
+                self.purse
+                    .free_funds(self.data.btc_funds_id())
+                    .await
+                    .unwrap();
+
                 self.data.set_state(FatCrabTakerState::OfferRejected);
                 self.notify_trade_rsp(trade_rsp, n3xb_trade_rsp_envelope)
                     .await;

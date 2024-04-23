@@ -168,8 +168,8 @@ impl<OrderType> FatCrabMakerAccess<OrderType> {
         rsp_rx.await.unwrap()
     }
 
-    pub async fn cancel_order(&self) -> Result<(), FatCrabError> {
-        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<(), FatCrabError>>();
+    pub async fn cancel_order(&self) -> Result<FatCrabMakerState, FatCrabError> {
+        let (rsp_tx, rsp_rx) = oneshot::channel::<Result<FatCrabMakerState, FatCrabError>>();
         self.tx
             .send(FatCrabMakerRequest::CancelOrder { rsp_tx })
             .await?;
@@ -399,7 +399,7 @@ enum FatCrabMakerRequest {
         rsp_tx: oneshot::Sender<Result<Option<FatCrabPeerEnvelope>, FatCrabError>>,
     },
     CancelOrder {
-        rsp_tx: oneshot::Sender<Result<(), FatCrabError>>,
+        rsp_tx: oneshot::Sender<Result<FatCrabMakerState, FatCrabError>>,
     },
     TradeResponse {
         trade_rsp_type: FatCrabTradeRspType,
@@ -997,14 +997,19 @@ impl FatCrabMakerBuyActor {
         Ok((trade_uuid, actor))
     }
 
-    async fn cancel_order(&self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+    async fn cancel_order(&self, rsp_tx: oneshot::Sender<Result<FatCrabMakerState, FatCrabError>>) {
         match self.data.state() {
             FatCrabMakerState::New
             | FatCrabMakerState::WaitingForOffers
             | FatCrabMakerState::ReceivedOffer => match self.n3xb_maker.cancel_order().await {
                 Ok(_) => {
-                    self.data.set_state(FatCrabMakerState::TradeCompleted);
-                    rsp_tx.send(Ok(())).unwrap();
+                    self.purse
+                        .free_funds(self.data.btc_funds_id())
+                        .await
+                        .unwrap();
+
+                    self.data.set_state(FatCrabMakerState::TradeCancelled);
+                    rsp_tx.send(Ok(FatCrabMakerState::TradeCancelled)).unwrap();
                 }
                 Err(error) => {
                     rsp_tx.send(Err(error.into())).unwrap();
@@ -1208,14 +1213,14 @@ impl FatCrabMakerSellActor {
         Ok((trade_uuid, actor))
     }
 
-    async fn cancel_order(&self, rsp_tx: oneshot::Sender<Result<(), FatCrabError>>) {
+    async fn cancel_order(&self, rsp_tx: oneshot::Sender<Result<FatCrabMakerState, FatCrabError>>) {
         match self.data.state() {
             FatCrabMakerState::New
             | FatCrabMakerState::WaitingForOffers
             | FatCrabMakerState::ReceivedOffer => match self.n3xb_maker.cancel_order().await {
                 Ok(_) => {
-                    self.data.set_state(FatCrabMakerState::TradeCompleted);
-                    rsp_tx.send(Ok(())).unwrap();
+                    self.data.set_state(FatCrabMakerState::TradeCancelled);
+                    rsp_tx.send(Ok(FatCrabMakerState::TradeCancelled)).unwrap();
                 }
                 Err(error) => {
                     rsp_tx.send(Err(error.into())).unwrap();
