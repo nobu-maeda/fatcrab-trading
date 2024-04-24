@@ -50,6 +50,12 @@ pub struct FatCrabTrader {
     taker_accessors: RwLock<HashMap<Uuid, FatCrabTakerAccessEnum>>,
 }
 
+#[cfg(debug_assertions)]
+const TRADE_ENGINE_NAME_STR: &str = "fatcrab-trade-engine-debug";
+
+#[cfg(not(debug_assertions))]
+const TRADE_ENGINE_NAME_STR: &str = "fatcrab-trade-engine";
+
 const DATA_DIR_PATH_STR: &str = "fatcrab_data";
 const PURSE_DIR_STR: &str = "purse";
 const MAKER_BUY_DIR_STR: &str = "makers/buy";
@@ -68,7 +74,7 @@ impl FatCrabTrader {
         info: BlockchainInfo,
         root_dir_path: impl AsRef<Path>,
     ) -> Self {
-        let trade_engine_name = "fat-crab-trade-engine";
+        let trade_engine_name = TRADE_ENGINE_NAME_STR;
         let n3xb_manager =
             Manager::new_with_key(secret_key, trade_engine_name, &root_dir_path).await;
         let pubkey = n3xb_manager.pubkey().await;
