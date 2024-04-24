@@ -1,8 +1,9 @@
 use std::{marker::PhantomData, path::Path, str::FromStr};
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use bitcoin::{Address, Txid};
 use crusty_n3xb::{
+    common::error::OfferInvalidReason,
     maker::{MakerAccess, MakerNotif},
     offer::OfferEnvelope,
     peer_msg::PeerEnvelope,
@@ -803,15 +804,10 @@ impl FatCrabMakerActor {
     }
 
     async fn handle_offer_notif(&self, offer_envelope: OfferEnvelope) {
-        if self.state() != FatCrabMakerState::WaitingForOffers
-            && self.state() != FatCrabMakerState::ReceivedOffer
+        if self
+            .handle_offer_in_unexpected_state(offer_envelope.clone())
+            .await
         {
-            debug!(
-                "Maker w/ TradeUUID {} received offer envelope w/ eventID {} in {:?} state",
-                self.trade_uuid.to_string(),
-                offer_envelope.event_id,
-                self.state()
-            );
             return;
         }
 
@@ -863,6 +859,45 @@ impl FatCrabMakerActor {
                 );
             }
         }
+    }
+
+    async fn handle_offer_in_unexpected_state(&self, offer_envelope: OfferEnvelope) -> bool {
+        if self.state() == FatCrabMakerState::WaitingForOffers
+            || self.state() == FatCrabMakerState::ReceivedOffer
+        {
+            return false;
+        }
+
+        warn!(
+            "Maker w/ TradeUUID {} received offer envelope w/ eventID {} in {:?} state",
+            self.trade_uuid.to_string(),
+            offer_envelope.event_id,
+            self.state()
+        );
+
+        info!(
+            "Maker w/ TradeUUID {} sending Offer rejection to {}",
+            self.trade_uuid.to_string(),
+            offer_envelope.pubkey
+        );
+
+        let mut trade_rsp_builder = TradeResponseBuilder::new();
+        trade_rsp_builder.offer_event_id(offer_envelope.event_id);
+        trade_rsp_builder.trade_response(TradeResponseStatus::Rejected);
+
+        match self.state() {
+            FatCrabMakerState::TradeCancelled => {
+                trade_rsp_builder.reject_reason(OfferInvalidReason::Cancelled);
+            }
+            _ => {
+                trade_rsp_builder.reject_reason(OfferInvalidReason::PendingAnother);
+            }
+        }
+
+        let n3xb_trade_rsp = trade_rsp_builder.build().unwrap();
+        self.n3xb_maker.reject_offer(n3xb_trade_rsp).await.unwrap();
+
+        return true;
     }
 
     async fn handle_peer_notif(&mut self, peer_envelope: PeerEnvelope) {
@@ -1056,6 +1091,7 @@ impl FatCrabMakerBuyActor {
                 let mut trade_rsp_builder = TradeResponseBuilder::new();
                 trade_rsp_builder.offer_event_id(offer_envelope.envelope.event_id);
                 trade_rsp_builder.trade_response(TradeResponseStatus::Rejected);
+                trade_rsp_builder.reject_reason(OfferInvalidReason::TradeEngineSpecific);
 
                 let n3xb_trade_rsp = trade_rsp_builder.build().unwrap();
                 self.n3xb_maker.reject_offer(n3xb_trade_rsp).await.unwrap();
@@ -1267,6 +1303,7 @@ impl FatCrabMakerSellActor {
                 let mut trade_rsp_builder = TradeResponseBuilder::new();
                 trade_rsp_builder.offer_event_id(offer_envelope.envelope.event_id);
                 trade_rsp_builder.trade_response(TradeResponseStatus::Rejected);
+                trade_rsp_builder.reject_reason(OfferInvalidReason::TradeEngineSpecific);
 
                 let n3xb_trade_rsp = trade_rsp_builder.build().unwrap();
                 self.n3xb_maker.reject_offer(n3xb_trade_rsp).await.unwrap();
