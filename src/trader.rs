@@ -24,7 +24,7 @@ use tokio::task::JoinError;
 use uuid::Uuid;
 
 use crate::{
-    common::{Balances, BlockchainInfo, FATCRAB_OBLIGATION_CUSTOM_KIND_STRING},
+    common::{Balances, BlockchainInfo, ProductionLevel, FATCRAB_OBLIGATION_CUSTOM_KIND_STRING},
     error::FatCrabError,
     maker::{
         FatCrabMaker, FatCrabMakerAccess, FatCrabMakerAccessEnum, FatCrabMakerEnum, MakerBuy,
@@ -50,10 +50,7 @@ pub struct FatCrabTrader {
     taker_accessors: RwLock<HashMap<Uuid, FatCrabTakerAccessEnum>>,
 }
 
-#[cfg(debug_assertions)]
-const TRADE_ENGINE_NAME_STR: &str = "fatcrab-trade-engine-debug";
-
-#[cfg(not(debug_assertions))]
+const TRADE_ENGINE_NAME_DBG_STR: &str = "fatcrab-trade-engine-debug";
 const TRADE_ENGINE_NAME_STR: &str = "fatcrab-trade-engine";
 
 const DATA_DIR_PATH_STR: &str = "fatcrab_data";
@@ -64,17 +61,25 @@ const TAKER_BUY_DIR_STR: &str = "takers/buy";
 const TAKER_SELL_DIR_STR: &str = "takers/sell";
 
 impl FatCrabTrader {
-    pub async fn new(info: BlockchainInfo, root_dir_path: impl AsRef<Path>) -> Self {
+    pub async fn new(
+        prod_lvl: ProductionLevel,
+        info: BlockchainInfo,
+        root_dir_path: impl AsRef<Path>,
+    ) -> Self {
         let secret_key = SecretKey::new(&mut rand::thread_rng());
-        Self::new_with_key(secret_key, info, root_dir_path).await
+        Self::new_with_key(prod_lvl, secret_key, info, root_dir_path).await
     }
 
     pub async fn new_with_key(
+        prod_lvl: ProductionLevel,
         secret_key: SecretKey,
         info: BlockchainInfo,
         root_dir_path: impl AsRef<Path>,
     ) -> Self {
-        let trade_engine_name = TRADE_ENGINE_NAME_STR;
+        let trade_engine_name = match prod_lvl {
+            ProductionLevel::Production => TRADE_ENGINE_NAME_STR,
+            ProductionLevel::Debug => TRADE_ENGINE_NAME_DBG_STR,
+        };
         let n3xb_manager =
             Manager::new_with_key(secret_key, trade_engine_name, &root_dir_path).await;
         let pubkey = n3xb_manager.pubkey().await;

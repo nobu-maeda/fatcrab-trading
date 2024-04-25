@@ -11,7 +11,7 @@ mod test {
     use uuid::Uuid;
 
     use fatcrab_trading::{
-        common::BlockchainInfo,
+        common::{BlockchainInfo, ProductionLevel},
         maker::{FatCrabMakerAccessEnum, FatCrabMakerNotif},
         order::{FatCrabOrder, FatCrabOrderType},
         taker::{FatCrabTakerAccessEnum, FatCrabTakerNotif},
@@ -71,8 +71,12 @@ mod test {
 
         // Add Relays
         {
-            let trader_m = FatCrabTrader::new_with_key(privkey_m, info.clone(), "").await;
-            let trader_t = FatCrabTrader::new_with_key(privkey_t, info.clone(), "").await;
+            let trader_m =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_m, info.clone(), "")
+                    .await;
+            let trader_t =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_t, info.clone(), "")
+                    .await;
 
             trader_m.add_relays(relay_addrs.clone()).await.unwrap();
             trader_t.add_relays(relay_addrs.clone()).await.unwrap();
@@ -84,8 +88,12 @@ mod test {
         // Fund Maker Trader
         {
             println!("Fund Maker Trader");
-            let trader_m = FatCrabTrader::new_with_key(privkey_m, info.clone(), "").await;
-            let trader_t = FatCrabTrader::new_with_key(privkey_t, info.clone(), "").await;
+            let trader_m =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_m, info.clone(), "")
+                    .await;
+            let trader_t =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_t, info.clone(), "")
+                    .await;
 
             trader_m.reconnect().await.unwrap();
             trader_t.reconnect().await.unwrap();
@@ -121,7 +129,9 @@ mod test {
         // New Maker
         {
             println!("New Maker");
-            let trader_m = FatCrabTrader::new_with_key(privkey_m, info.clone(), "").await;
+            let trader_m =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_m, info.clone(), "")
+                    .await;
             trader_m.reconnect().await.unwrap();
             trader_m.wallet_blockchain_sync().await.unwrap();
 
@@ -152,7 +162,9 @@ mod test {
         // Post Order
         {
             println!("Post Order");
-            let trader_m = FatCrabTrader::new_with_key(privkey_m, info.clone(), "").await;
+            let trader_m =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_m, info.clone(), "")
+                    .await;
             trader_m.reconnect().await.unwrap();
 
             let makers = trader_m.get_makers().await;
@@ -168,7 +180,9 @@ mod test {
 
             // Create New Takers
             println!("Create New Takers");
-            let trader_t = FatCrabTrader::new_with_key(privkey_t, info.clone(), "").await;
+            let trader_t =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_t, info.clone(), "")
+                    .await;
             trader_t.reconnect().await.unwrap();
 
             let orders = trader_t
@@ -191,7 +205,9 @@ mod test {
         // Taker Order
         {
             println!("Taker Order");
-            let trader_t = FatCrabTrader::new_with_key(privkey_t, info.clone(), "").await;
+            let trader_t =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_t, info.clone(), "")
+                    .await;
             let takers = trader_t.get_takers().await;
             let taker_enum = takers.get(&trade_uuid).unwrap().to_owned();
             let taker = match taker_enum {
@@ -211,7 +227,9 @@ mod test {
 
             // Wait for Offer
             println!("Wait for Offer");
-            let trader_m = FatCrabTrader::new_with_key(privkey_m, info.clone(), "").await;
+            let trader_m =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_m, info.clone(), "")
+                    .await;
             let makers = trader_m.get_makers().await;
             let maker_enum = makers.get(&trade_uuid).unwrap().to_owned();
             let maker = match maker_enum {
@@ -237,7 +255,9 @@ mod test {
         // Accept Offer
         {
             println!("Accept Offer - Restore Maker");
-            let trader_m = FatCrabTrader::new_with_key(privkey_m, info.clone(), "").await;
+            let trader_m =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_m, info.clone(), "")
+                    .await;
             let makers = trader_m.get_makers().await;
             let maker_enum = makers.get(&trade_uuid).unwrap().to_owned();
             let maker = match maker_enum {
@@ -267,7 +287,9 @@ mod test {
 
             // Expect Trade notify
             println!("Expect Trade notify");
-            let trader_t = FatCrabTrader::new_with_key(privkey_t, info.clone(), "").await;
+            let trader_t =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_t, info.clone(), "")
+                    .await;
             let takers = trader_t.get_takers().await;
             let taker_enum = takers.get(&trade_uuid).unwrap().to_owned();
             let taker = match taker_enum {
@@ -308,7 +330,9 @@ mod test {
         // Taker - User Remits Fatcrabs
         {
             println!("Taker - User Remits Fatcrabs");
-            let trader_t = FatCrabTrader::new_with_key(privkey_t, info.clone(), "").await;
+            let trader_t =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_t, info.clone(), "")
+                    .await;
             let takers = trader_t.get_takers().await;
             let taker_enum = takers.get(&trade_uuid).unwrap().to_owned();
             let taker = match taker_enum {
@@ -346,7 +370,9 @@ mod test {
             sleep(Duration::from_secs(1)).await;
 
             println!("Wait for Fatcrab remittance Peer Message");
-            let trader_m = FatCrabTrader::new_with_key(privkey_m, info.clone(), "").await;
+            let trader_m =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_m, info.clone(), "")
+                    .await;
             let makers = trader_m.get_makers().await;
             let maker_enum = makers.get(&trade_uuid).unwrap().to_owned();
             let maker = match maker_enum {
@@ -379,7 +405,9 @@ mod test {
         // Maker - Release Bitcoin to Taker
         {
             println!("Maker - Release Bitcoin to Taker");
-            let trader_m = FatCrabTrader::new_with_key(privkey_m, info.clone(), "").await;
+            let trader_m =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_m, info.clone(), "")
+                    .await;
             trader_m.wallet_blockchain_sync().await.unwrap();
 
             let makers = trader_m.get_makers().await;
@@ -411,7 +439,9 @@ mod test {
 
             // Taker - Wait for Fatcrab Peer Message
 
-            let trader_t = FatCrabTrader::new_with_key(privkey_t, info.clone(), "").await;
+            let trader_t =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_t, info.clone(), "")
+                    .await;
             let takers = trader_t.get_takers().await;
             let taker_enum = takers.get(&trade_uuid).unwrap().to_owned();
             let taker = match taker_enum {
@@ -438,8 +468,12 @@ mod test {
         // Taker - Confirm Bitcoin Tx
         {
             println!("Taker - Confirm Bitcoin Tx");
-            let trader_m = FatCrabTrader::new_with_key(privkey_m, info.clone(), "").await;
-            let trader_t = FatCrabTrader::new_with_key(privkey_t, info.clone(), "").await;
+            let trader_m =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_m, info.clone(), "")
+                    .await;
+            let trader_t =
+                FatCrabTrader::new_with_key(ProductionLevel::Debug, privkey_t, info.clone(), "")
+                    .await;
 
             // Mine several blocks to confirm Bitcoin Tx
             node.generate_blocks(10);

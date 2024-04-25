@@ -6,7 +6,7 @@ mod test {
     use tracing::error;
 
     use fatcrab_trading::{
-        common::BlockchainInfo,
+        common::{BlockchainInfo, ProductionLevel},
         maker::{FatCrabMakerNotif, FatCrabMakerState},
         order::{FatCrabOrder, FatCrabOrderType},
         taker::{FatCrabTakerNotif, FatCrabTakerState},
@@ -63,10 +63,10 @@ mod test {
             auth: node.auth(),
             network: node.network(),
         };
-        let trader_m = FatCrabTrader::new(info.clone(), "").await;
+        let trader_m = FatCrabTrader::new(ProductionLevel::Debug, info.clone(), "").await;
 
         // Taker - Create Fatcrab Trader for Taker
-        let trader_t = FatCrabTrader::new(info, "").await;
+        let trader_t = FatCrabTrader::new(ProductionLevel::Debug, info, "").await;
 
         // Add Relays
         let mut relay_addrs: Vec<(Url, Option<SocketAddr>)> = Vec::new();
