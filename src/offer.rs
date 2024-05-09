@@ -105,7 +105,10 @@ impl FatCrabOffer {
             FatCrabOrderType::Buy => {
                 assert_eq!(order.order_type, FatCrabOrderType::Buy);
                 let maker_obligation = Obligation {
-                    kind: ObligationKind::Bitcoin(Some(BitcoinSettlementMethod::Onchain)),
+                    kind: ObligationKind::Bitcoin(
+                        order.n3xb_network(),
+                        Some(BitcoinSettlementMethod::Onchain),
+                    ),
                     amount: (order.amount * order.price).round(), // Sat amount in fraction is not allowed
                     bond_amount: None,
                 };
@@ -128,7 +131,10 @@ impl FatCrabOffer {
                     bond_amount: None,
                 };
                 let taker_obligation = Obligation {
-                    kind: ObligationKind::Bitcoin(Some(BitcoinSettlementMethod::Onchain)),
+                    kind: ObligationKind::Bitcoin(
+                        order.n3xb_network(),
+                        Some(BitcoinSettlementMethod::Onchain),
+                    ),
                     amount: (order.amount * order.price).round(), // Sat amount in fraction is not allowed
                     bond_amount: None,
                 };

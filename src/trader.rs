@@ -10,7 +10,7 @@ use bip39::Mnemonic;
 use bitcoin::{Address, Txid};
 
 use crusty_n3xb::{
-    common::types::{BitcoinSettlementMethod, ObligationKind},
+    common::types::{BitcoinNetwork, BitcoinSettlementMethod, ObligationKind},
     maker::MakerAccess,
     manager::Manager,
     order::FilterTag,
@@ -41,6 +41,7 @@ use crate::{
 
 pub struct FatCrabTrader {
     n3xb_manager: Manager,
+    network: bitcoin::Network,
     trader_dir_path: PathBuf,
     purse: Purse,
     purse_accessor: PurseAccess,
@@ -70,6 +71,20 @@ impl FatCrabTrader {
         Self::new_with_key(prod_lvl, secret_key, info, root_dir_path).await
     }
 
+    fn bitcoin_network_to_n3xb(network: bitcoin::Network) -> BitcoinNetwork {
+        match network {
+            bitcoin::Network::Bitcoin => BitcoinNetwork::Mainnet,
+            bitcoin::Network::Testnet => BitcoinNetwork::Testnet,
+            bitcoin::Network::Regtest => BitcoinNetwork::Regtest,
+            bitcoin::Network::Signet => BitcoinNetwork::Signet,
+            _ => panic!("FatCrabTrader::bitcoin_network_to_n3xb() - Unsupported Bitcoin Network"),
+        }
+    }
+
+    fn n3xb_network(&self) -> BitcoinNetwork {
+        Self::bitcoin_network_to_n3xb(self.network)
+    }
+
     pub async fn new_with_key(
         prod_lvl: ProductionLevel,
         secret_key: SecretKey,
@@ -80,14 +95,23 @@ impl FatCrabTrader {
             ProductionLevel::Production => TRADE_ENGINE_NAME_STR,
             ProductionLevel::Debug => TRADE_ENGINE_NAME_DBG_STR,
         };
+        let network = match info {
+            BlockchainInfo::Electrum { network, .. } => network,
+            BlockchainInfo::Rpc { network, .. } => network,
+        };
+        let n3xb_network = Self::bitcoin_network_to_n3xb(network);
         let n3xb_manager =
-            Manager::new_with_key(secret_key, trade_engine_name, &root_dir_path).await;
+            Manager::new_with_key(secret_key, trade_engine_name, n3xb_network, &root_dir_path)
+                .await;
         let pubkey = n3xb_manager.pubkey().await;
 
-        let trader_dir_path =
-            root_dir_path
-                .as_ref()
-                .join(format!("{}/{}", DATA_DIR_PATH_STR, pubkey.to_string()));
+        let trader_dir_path = root_dir_path.as_ref().join(format!(
+            "{}/{}/{}/{}",
+            DATA_DIR_PATH_STR,
+            pubkey.to_string(),
+            trade_engine_name,
+            network
+        ));
 
         let purse_dir_path = trader_dir_path.join(PURSE_DIR_STR);
         std::fs::create_dir_all(&purse_dir_path).unwrap();
@@ -97,6 +121,7 @@ impl FatCrabTrader {
 
         let trader = Self {
             n3xb_manager,
+            network,
             trader_dir_path,
             purse,
             purse_accessor,
@@ -466,6 +491,10 @@ impl FatCrabTrader {
         Ok(())
     }
 
+    pub fn get_network(&self) -> bitcoin::Network {
+        self.network
+    }
+
     pub async fn wallet_bip39_mnemonic(&self) -> Result<Mnemonic, FatCrabError> {
         self.purse_accessor.get_mnemonic().await
     }
@@ -599,7 +628,7 @@ impl FatCrabTrader {
         let custom_fatcrab_obligation_kind: ObligationKind =
             ObligationKind::Custom(FATCRAB_OBLIGATION_CUSTOM_KIND_STRING.to_string());
         let bitcoin_onchain_obligation_kind: ObligationKind =
-            ObligationKind::Bitcoin(Some(BitcoinSettlementMethod::Onchain));
+            ObligationKind::Bitcoin(self.n3xb_network(), Some(BitcoinSettlementMethod::Onchain));
 
         let mut filter_tags = Vec::new();
         if let Some(order_type) = order_type {
@@ -632,7 +661,7 @@ impl FatCrabTrader {
         let orders: Vec<FatCrabOrderEnvelope> = n3xb_orders
             .into_iter()
             .map(|envelope| FatCrabOrderEnvelope {
-                order: FatCrabOrder::from_n3xb_order(envelope.order.clone()).unwrap(),
+                order: FatCrabOrder::from_n3xb_order(envelope.order.clone(), self.network).unwrap(),
                 pubkey: envelope.pubkey.to_string(),
                 envelope,
             })

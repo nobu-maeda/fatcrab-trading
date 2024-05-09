@@ -147,6 +147,7 @@ mod test {
                 trade_uuid,
                 amount: PURCHASE_AMOUNT,
                 price: PURCHASE_PRICE,
+                network: node.network(),
             };
 
             // Maker - Create Fatcrab Maker

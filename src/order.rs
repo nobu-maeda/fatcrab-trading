@@ -1,10 +1,11 @@
 use std::{any::Any, collections::HashSet};
 
+use bitcoin::Network;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crusty_n3xb::{
-    common::types::{BitcoinSettlementMethod, ObligationKind, SerdeGenericTrait},
+    common::types::{BitcoinNetwork, BitcoinSettlementMethod, ObligationKind, SerdeGenericTrait},
     order::{
         MakerObligation, MakerObligationContent, Order, OrderBuilder, OrderEnvelope,
         TakerObligation, TakerObligationContent, TradeDetails, TradeDetailsContent, TradeParameter,
@@ -47,6 +48,7 @@ pub struct FatCrabOrder {
     pub trade_uuid: Uuid,
     pub amount: f64, // in FC
     pub price: f64,  // in sats / FC       // in sats / FC
+    pub network: Network,
 }
 
 // Quick Reference for FatCrab Order to n3xB Order Maker/Taker Obligation
@@ -56,7 +58,17 @@ pub struct FatCrabOrder {
 // n3xB Orders - Maker Obligation in FC, Amount in FC, receives sats. Taker Obligation BTC, Limit rate in #Sats/#FC = Price
 
 impl FatCrabOrder {
-    pub(crate) fn from_n3xb_order(order: Order) -> Result<Self, FatCrabError> {
+    pub fn n3xb_network(&self) -> BitcoinNetwork {
+        match self.network {
+            Network::Bitcoin => BitcoinNetwork::Mainnet,
+            Network::Testnet => BitcoinNetwork::Testnet,
+            Network::Regtest => BitcoinNetwork::Regtest,
+            Network::Signet => BitcoinNetwork::Signet,
+            _ => panic!("FatCrabOrder::bitcoin_network_to_n3xb() - Unexpected Bitcoin Network"),
+        }
+    }
+
+    pub(crate) fn from_n3xb_order(order: Order, network: Network) -> Result<Self, FatCrabError> {
         let mut amount: Option<f64> = None;
         let mut price: Option<f64> = None;
         let mut fatcrab_order_kind: Option<FatCrabOrderType> = None;
@@ -74,7 +86,14 @@ impl FatCrabOrder {
                         price = Some(order.taker_obligation.content.limit_rate.unwrap());
                     }
                 }
-                ObligationKind::Bitcoin(settlement) => {
+                ObligationKind::Bitcoin(n3xb_network, settlement) => {
+                    if !Self::bitcoin_network_matches(n3xb_network, network) {
+                        return Err(FatCrabError::Simple {
+                            description: "FatCrabOrder::from() - Unexpected Bitcoin Network"
+                                .to_string(),
+                        });
+                    }
+
                     if let Some(settlement) = settlement {
                         if settlement == BitcoinSettlementMethod::Onchain {
                             intended_order_kind = Some(FatCrabOrderType::Buy);
@@ -113,7 +132,7 @@ impl FatCrabOrder {
                         intended_order_kind = Some(FatCrabOrderType::Buy);
                     }
                 }
-                ObligationKind::Bitcoin(settlement) => {
+                ObligationKind::Bitcoin(_network, settlement) => {
                     if let Some(settlement) = settlement {
                         if settlement == BitcoinSettlementMethod::Onchain {
                             intended_order_kind = Some(FatCrabOrderType::Sell);
@@ -146,11 +165,21 @@ impl FatCrabOrder {
                 trade_uuid: order.trade_uuid,
                 amount,
                 price,
+                network,
             });
         } else {
             Err(FatCrabError::Simple {
                 description: "FatCrabOrder::from() - Could not determine order type".to_string(),
             })
+        }
+    }
+
+    fn bitcoin_network_matches(n3xb_network: BitcoinNetwork, bitcoin_network: Network) -> bool {
+        match n3xb_network {
+            BitcoinNetwork::Mainnet => bitcoin_network == Network::Bitcoin,
+            BitcoinNetwork::Testnet => bitcoin_network == Network::Testnet,
+            BitcoinNetwork::Regtest => bitcoin_network == Network::Regtest,
+            BitcoinNetwork::Signet => bitcoin_network == Network::Signet,
         }
     }
 }
@@ -163,8 +192,10 @@ impl Into<Order> for FatCrabOrder {
             FatCrabOrderType::Buy => {
                 builder.trade_uuid(self.trade_uuid);
 
-                let maker_obligation_kind =
-                    ObligationKind::Bitcoin(Some(BitcoinSettlementMethod::Onchain));
+                let maker_obligation_kind = ObligationKind::Bitcoin(
+                    self.n3xb_network(),
+                    Some(BitcoinSettlementMethod::Onchain),
+                );
                 let maker_obligation_kinds =
                     HashSet::from_iter(vec![maker_obligation_kind].into_iter());
                 let maker_obligation_content = MakerObligationContent {
@@ -218,8 +249,10 @@ impl Into<Order> for FatCrabOrder {
 
                 builder.maker_obligation(maker_obligation);
 
-                let taker_obligation_kind =
-                    ObligationKind::Bitcoin(Some(BitcoinSettlementMethod::Onchain));
+                let taker_obligation_kind = ObligationKind::Bitcoin(
+                    self.n3xb_network(),
+                    Some(BitcoinSettlementMethod::Onchain),
+                );
                 let taker_obligation_kinds =
                     HashSet::from_iter(vec![taker_obligation_kind].into_iter());
                 let taker_obligation_content = TakerObligationContent {
